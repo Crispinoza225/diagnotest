@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Signature de la version « release » : fichier de propriétés hors du dépôt.
+// Localement : ~/.diagnotest/keystore.properties ; en CI : variable DIAGNOTEST_KEYSTORE_PROPERTIES.
+// Sans ce fichier, l'APK release est signé avec la clé de debug (utile pour tester).
+def keyProps = new Properties()
+def keyFile = file(System.getenv('DIAGNOTEST_KEYSTORE_PROPERTIES') ?: "${System.getProperty('user.home')}/.diagnotest/keystore.properties")
+if (keyFile.exists()) keyFile.withInputStream { keyProps.load(it) }
+
+android {
+    namespace 'io.github.crispinoza225.diagnotest'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'io.github.crispinoza225.diagnotest'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '1.1.0'
+    }
+
+    signingConfigs {
+        release {
+            if (keyProps['storeFile']) {
+                storeFile file(keyProps['storeFile'])
+                storePassword keyProps['storePassword']
+                keyAlias keyProps['keyAlias']
+                keyPassword keyProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keyProps['storeFile'] ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Le site web (index.html, css/, js/) est copié dans les assets à chaque compilation :
+    // une seule source de vérité pour le site et l'application.
+    sourceSets {
+        main {
+            assets.srcDir(layout.buildDirectory.dir('generated/web'))
+        }
+    }
+}
+
+def copyWeb = tasks.register('copyWeb', Sync) {
+    from(rootProject.file('..')) {
+        include 'index.html', 'css/**', 'js/**'
+    }
+    into layout.buildDirectory.dir('generated/web/www')
+}
+tasks.named('preBuild') { dependsOn copyWeb }

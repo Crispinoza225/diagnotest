@@ -4,6 +4,7 @@ Ce guide explique comment faire chaque test et comment lire les résultats. Si v
 
 - [Avant de commencer](#avant-de-commencer)
 - [Tests de la version web](#tests-de-la-version-web)
+- [Application Android](#application-android)
 - [Version PC (Python)](#version-pc-python)
 - [Le rapport](#le-rapport)
 - [Questions fréquentes](#questions-fréquentes)
@@ -120,6 +121,35 @@ Affiche une fractale animée très coûteuse à calculer pendant 10 s.
 - Le **FPS moyen** et le **score en Mpix/s** permettent de comparer des appareils entre eux.
 - Si le **FPS minimum** est très inférieur à la moyenne, il y a des saccades : surchauffe ou pilote graphique en cause.
 - Des artefacts visuels (carrés, lignes, couleurs aberrantes) peuvent indiquer une carte graphique défaillante.
+
+---
+
+## Application Android
+
+L'application contient tout le site, et elle fonctionne donc hors ligne, à l'exception du test réseau. Elle ajoute des mesures qu'un navigateur ne peut pas lire.
+
+### Installation
+1. Sur le téléphone, téléchargez [DiagnoTest.apk](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.apk).
+2. Ouvrez le fichier. Android demande d'autoriser le navigateur à « installer des applications inconnues » : acceptez pour ce navigateur seulement. Vous pourrez retirer l'autorisation ensuite.
+3. Play Protect peut signaler une application inconnue : choisissez **Installer quand même**.
+
+### Ce qui change par rapport au site
+| Carte | Informations en plus |
+|---|---|
+| Informations système | Modèle exact, puce (SoC), fréquence maximale du processeur, **RAM exacte**, stockage libre et total, correctif de sécurité, équipements (NFC, empreinte, téléphonie, infrarouge…) |
+| Batterie | Santé selon Android, **température**, **tension**, **courant** consommé ou reçu, technologie, **nombre de cycles** (Android 14 et plus), capacité d'origine, **capacité actuelle estimée** |
+| Écran | Résolution physique, diagonale, fréquence maximale de la dalle, HDR |
+| Capteurs | Liste de tous les capteurs matériels déclarés par le téléphone |
+| Rapport | Enregistré dans **Téléchargements/DiagnoTest**, bouton **Partager** (e-mail, messagerie…) |
+
+### Lire la batterie
+| Mesure | Interprétation |
+|---|---|
+| Température | Normale en dessous de 40 °C. À partir de 45 °C, laissez refroidir le téléphone. |
+| Santé estimée | Compteur de charge ramené à 100 %, comparé à la capacité d'origine. ≥ 80 % : bon ; 60 à 80 % : usure notable ; < 60 % : à remplacer. |
+| Cycles | Une batterie de téléphone perd en général 20 % de capacité vers 500 à 800 cycles. |
+
+> La capacité estimée est approximative (±10 %). Elle est plus fiable entre 50 et 100 % de charge. Certains constructeurs fournissent un compteur incohérent : l'application le détecte et affiche « Non mesurable » plutôt qu'un faux diagnostic.
 
 ---
 

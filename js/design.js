@@ -252,7 +252,9 @@
   /* ---------------- Couleur de la barre du navigateur mobile selon le thème ---------------- */
   const syncThemeColor = () => {
     const meta = $('meta[name="theme-color"]');
-    if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (meta) meta.content = bg;
+    try { window.DiagnoAndroid?.setSystemBarColor?.(bg); } catch { /* hors application Android */ }
   };
   new MutationObserver(syncThemeColor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   syncThemeColor();

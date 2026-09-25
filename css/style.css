@@ -370,3 +370,6 @@ dialog pre {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .reveal, .te-word, .rise { opacity: 1; filter: none; transform: none; }
 }
+
+/* Dans l'application Android, les liens de téléchargement n'ont pas de sens. */
+.in-app .dl-link { display: none; }

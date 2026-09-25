@@ -14,11 +14,15 @@ diagnotest/
 │   ├── build_exe.ps1       # Compilation en DiagnoTest.exe (PyInstaller)
 │   ├── version_info.txt    # Métadonnées Windows de l'exécutable
 │   └── assets/             # Icône de l'application
+├── android/                # Application Android (WebView + pont natif Java, sans dépendance)
+│   ├── app/build.gradle    # Copie le site dans les assets à chaque compilation
+│   └── app/src/main/java/…/MainActivity.java, DiagnoBridge.java
 ├── docs/
 │   ├── GUIDE.md            # Guide d'utilisation
 │   └── TECHNIQUE.md        # Ce fichier
 ├── .github/workflows/pages.yml       # Déploiement automatique sur GitHub Pages
 ├── .github/workflows/build-exe.yml   # Compilation et publication de DiagnoTest.exe
+├── .github/workflows/build-apk.yml   # Compilation et publication de DiagnoTest.apk
 ├── LICENSE
 └── README.md
 ```
@@ -135,6 +139,52 @@ Détails propres à l'exécutable :
 - l'appel `mp.freeze_support()` permet à `multiprocessing` (benchmark CPU) de fonctionner une fois compilé ;
 - lancé par double-clic, sans argument, il attend Entrée avant de se fermer pour qu'on puisse lire les résultats ;
 - il n'est pas signé : Windows SmartScreen affiche donc un avertissement au premier lancement.
+
+## Application Android
+
+### Architecture
+- `MainActivity` affiche le site dans une WebView. Les fichiers sont servis depuis les assets sous `https://appassets.androidplatform.net/www/`, un domaine réservé à cet usage. La page est ainsi un **contexte sécurisé**, ce qui est indispensable pour `getUserMedia` (caméra, micro) et la géolocalisation.
+- `app/build.gradle` copie `index.html`, `css/` et `js/` dans les assets à chaque compilation : le site et l'application ont **une seule source**.
+- `MainActivity` gère aussi les permissions Android (caméra, micro, localisation, demandées seulement au moment du test), le plein écran des tests d'écran (`onShowCustomView`), le bouton retour (`OnBackInvokedCallback` sur Android 13 et plus), l'affichage bord à bord et l'ouverture des liens externes dans le navigateur.
+- `DiagnoBridge` est exposé à la page sous `window.DiagnoAndroid` :
+
+| Méthode | Renvoie |
+|---|---|
+| `getDeviceInfo()` | JSON : modèle, SoC, ABI, cœurs, fréquence max, RAM (`ActivityManager`), stockage (`StatFs`), écran (`Display`), capteurs (`SensorManager`), équipements (`PackageManager`) |
+| `getBatteryInfo()` | JSON : `ACTION_BATTERY_CHANGED` (niveau, santé, température, tension, cycles), `BatteryManager` (compteur de charge, courant), capacité d'origine (`PowerProfile`, sinon `/sys`) |
+| `vibrate(motif)` | `true` si le vibreur a été actionné |
+| `saveFile(nom, contenu, type)` | Emplacement du fichier enregistré dans Téléchargements/DiagnoTest (`MediaStore`) |
+| `shareText(titre, texte)` | Ouvre le menu de partage Android |
+| `setSystemBarColor(couleur)` | Accorde les barres système au thème de la page |
+
+- Dans `js/app.js`, `nativeCall()` appelle ces méthodes quand elles existent. Sans le pont, dans un navigateur, chaque test garde son comportement web.
+
+### Compilation locale
+Prérequis : Android Studio, ou un JDK 17+ avec le SDK Android 36.
+
+`ash
+cd android
+`
+
+`ash
+./gradlew assembleRelease
+`
+
+L'APK se trouve dans `android/app/build/outputs/apk/release/app-release.apk`. Une compilation debug (`assembleDebug`) active l'inspection de la WebView dans `chrome://inspect`.
+
+### Signature
+La clé n'est **jamais** dans le dépôt. `app/build.gradle` lit `~/.diagnotest/keystore.properties` (ou le chemin indiqué dans `DIAGNOTEST_KEYSTORE_PROPERTIES`) :
+
+`properties
+storeFile=C:/Users/<vous>/.diagnotest/diagnotest-release.jks
+storePassword=…
+keyAlias=diagnotest
+keyPassword=…
+`
+
+Sans ce fichier, l'APK est signé avec la clé de debug, ce qui convient pour les tests. **Gardez une sauvegarde de la clé** : sans elle, impossible de publier une mise à jour installable par-dessus la version existante.
+
+Pour que GitHub Actions signe et publie l'APK à chaque étiquette `v*`, ajoutez deux secrets au dépôt (*Settings → Secrets and variables → Actions*) : `ANDROID_KEYSTORE_B64` (la clé encodée en base64) et `ANDROID_KEYSTORE_PASSWORD`. Sans ces secrets, le workflow compile quand même un APK de test, mais ne le publie pas dans la release.
 
 ## Déploiement
 

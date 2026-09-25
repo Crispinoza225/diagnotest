@@ -20,6 +20,20 @@ const fmtDur = (s) => {
   return h ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`;
 };
 
+/* Pont natif de l'application Android (android/…/DiagnoBridge.java). Absent dans un navigateur :
+ * chaque test garde alors son comportement web. */
+const NATIVE = window.DiagnoAndroid || null;
+const nativeCall = (fn, ...args) => {
+  if (!NATIVE || typeof NATIVE[fn] !== 'function') return null;
+  try {
+    const r = NATIVE[fn](...args);
+    return typeof r === 'string' && /^[[{]/.test(r) ? JSON.parse(r) : r;
+  } catch { return null; }
+};
+let DEVICE; // infos appareil natives, lues une seule fois (la liste des capteurs coûte cher)
+const device = () => (DEVICE === undefined ? (DEVICE = nativeCall('getDeviceInfo')) : DEVICE);
+if (NATIVE) document.documentElement.classList.add('in-app');
+
 /* ------------------------------------------------------------------ */
 /* Résultats & résumé                                                  */
 /* ------------------------------------------------------------------ */
@@ -127,6 +141,22 @@ async function initSystem() {
       if (h.model) info['Modèle'] = h.model;
     } catch { /* API refusée : on garde la détection par user-agent */ }
   }
+  const dev = device();
+  if (dev && !dev.error) {
+    const FEATURES = { telephony: 'Téléphonie', wifi: 'Wi-Fi', bluetoothLe: 'Bluetooth LE', nfc: 'NFC', gps: 'GPS',
+      fingerprint: 'Empreinte digitale', face: 'Reconnaissance faciale', flash: 'Flash', usbHost: 'USB OTG', ir: 'Infrarouge' };
+    info['Système'] = `Android ${dev.android} (API ${dev.sdk})`;
+    info['Moteur web'] = info['Navigateur'].replace('Chrome', 'WebView'); delete info['Navigateur'];
+    info['Modèle'] = `${dev.manufacturer.charAt(0).toUpperCase()}${dev.manufacturer.slice(1)} ${dev.model}`;
+    info['Puce'] = dev.socModel ? `${dev.socManufacturer} ${dev.socModel}` : dev.hardware;
+    info['Cœurs logiques'] = `${dev.cores}${dev.cpuMaxMHz ? ` (jusqu’à ${fmt(dev.cpuMaxMHz / 1000, 2)} GHz)` : ''}`;
+    delete info['RAM (approx.)'];
+    info['RAM'] = `${fmtBytes(dev.ramTotal)} (${fmtBytes(dev.ramAvail)} disponibles)`;
+    info['Stockage'] = `${fmtBytes(dev.storageFree)} libres sur ${fmtBytes(dev.storageTotal)}`;
+    info['Architecture'] = dev.abis;
+    info['Correctif de sécurité'] = dev.securityPatch;
+    info['Équipements'] = Object.entries(FEATURES).filter(([k]) => dev.features?.[k]).map(([, v]) => v).join(', ');
+  }
   kv($('#sysInfo'), info);
   setResult('system', 'info', info);
 }
@@ -134,41 +164,106 @@ async function initSystem() {
 /* ------------------------------------------------------------------ */
 /* Batterie                                                            */
 /* ------------------------------------------------------------------ */
-let battery = null;
+const BAT_HEALTH = { 1: 'Inconnue', 2: 'Bonne', 3: 'Surchauffe', 4: 'Batterie morte', 5: 'Surtension', 6: 'Défaillance', 7: 'Trop froide' };
+const BAT_PLUG = { 1: 'chargeur secteur', 2: 'USB', 4: 'sans fil', 8: 'dock' };
+
+function showBatteryLevel(pct) {
+  const fill = $('#batFill');
+  fill.style.width = `${pct}%`;
+  fill.style.background = pct <= 20 ? 'var(--ko)' : pct <= 40 ? 'var(--warn)' : 'var(--ok)';
+  $('#batPct').textContent = `${pct} %`;
+}
+
 async function initBattery() {
   const out = $('#batInfo');
-  if (!navigator.getBattery) {
-    kv(out, { 'Statut': 'API Batterie non disponible sur ce navigateur (Firefox, Safari, iOS). Essayez Chrome/Edge, ou le script Python sur PC.' });
+  let readState; // () => { level: 0..1, charging }
+  let lastShown = '';
+  const publish = (status, data) => {
+    kv(out, data);
+    const key = JSON.stringify(data) + status;
+    if (key !== lastShown) { lastShown = key; setResult('battery', status, data); } // évite un flash toutes les 5 s
+  };
+
+  if (nativeCall('getBatteryInfo')) {
+    // Application Android : mesures du système (santé, température, tension, courant, cycles, capacité).
+    const read = () => nativeCall('getBatteryInfo');
+    readState = () => { const b = read(); return { level: b.level / b.scale, charging: b.charging }; };
+    const update = () => {
+      const b = read();
+      if (!b || b.error) return;
+      const pct = Math.round((b.level / b.scale) * 100);
+      showBatteryLevel(pct);
+      let cur = b.currentNow || 0;
+      if (cur && Math.abs(cur) < 10000) cur *= 1000; // certains constructeurs renvoient des mA au lieu de µA
+      // Capacité actuelle estimée : compteur de charge (µAh) ramené à 100 %. Précision d'environ ±10 %.
+      // Le compteur est parfois factice ou exprimé en mAh au lieu de µAh : on n'accepte qu'un résultat
+      // plausible (30 à 130 % de la capacité d'origine), sinon on l'écarte plutôt que d'afficher un faux défaut.
+      const design = b.designCapacity > 0 ? b.designCapacity : null;
+      let fullMah = null, counterUnreliable = false;
+      if (b.chargeCounter > 0 && pct >= 15) {
+        const plausible = (mah) => !design || (mah / design >= 0.3 && mah / design <= 1.3);
+        const asMicro = b.chargeCounter / 1000 / (pct / 100), asMilli = b.chargeCounter / (pct / 100);
+        if (plausible(asMicro)) fullMah = asMicro;
+        else if (plausible(asMilli)) fullMah = asMilli;
+        else counterUnreliable = true;
+      }
+      const health = fullMah && design ? Math.min(100, (fullMah / design) * 100) : null;
+      const temp = b.temperature / 10;
+      const data = {
+        'Niveau': `${pct} %`,
+        'État': b.charging ? `En charge ⚡${BAT_PLUG[b.plugged] ? ` (${BAT_PLUG[b.plugged]})` : ''}` : 'Sur batterie',
+        'Santé (système)': BAT_HEALTH[b.health] || 'Inconnue',
+        'Température': `${fmt(temp)} °C`,
+        'Tension': `${fmt(b.voltage / 1000, 2)} V`,
+        'Courant': cur ? `${fmt(Math.abs(cur) / 1000, 0)} mA ${b.charging ? 'entrants' : 'consommés'}` : undefined,
+        'Technologie': b.technology || undefined,
+        'Cycles de charge': b.cycleCount > 0 ? b.cycleCount : undefined,
+        'Capacité d’origine': design ? `${fmt(design, 0)} mAh` : undefined,
+        'Capacité actuelle estimée': fullMah ? `≈ ${fmt(fullMah, 0)} mAh` : undefined,
+        'Santé estimée': health ? `≈ ${fmt(health, 0)} % de la capacité d’origine`
+          : counterUnreliable ? 'Non mesurable : compteur de charge incohérent sur cet appareil' : undefined,
+      };
+      let status = 'ok';
+      if ([4, 6].includes(b.health) || (health && health < 60)) {
+        status = 'ko'; data['Diagnostic'] = 'Batterie défaillante ou très usée : remplacement conseillé.';
+      } else if ([3, 5, 7].includes(b.health) || temp >= 45 || (health && health < 80)) {
+        status = 'warn';
+        data['Diagnostic'] = temp >= 45 ? 'Batterie chaude : laissez refroidir l’appareil.' : 'Usure notable : autonomie réduite.';
+      } else if (pct <= 20 && !b.charging) status = 'warn';
+      publish(status, data);
+    };
+    update();
+    setInterval(update, 5000);
+  } else if (navigator.getBattery) {
+    const battery = await navigator.getBattery();
+    readState = () => ({ level: battery.level, charging: battery.charging });
+    const update = () => {
+      const pct = Math.round(battery.level * 100);
+      showBatteryLevel(pct);
+      const data = {
+        'Niveau': `${pct} %`,
+        'En charge': battery.charging ? 'Oui ⚡' : 'Non',
+        'Temps avant charge complète': battery.charging ? (battery.chargingTime === Infinity ? 'Calcul en cours…' : fmtDur(battery.chargingTime)) : undefined,
+        'Autonomie restante': !battery.charging ? (battery.dischargingTime === Infinity ? 'Calcul en cours…' : fmtDur(battery.dischargingTime)) : undefined,
+      };
+      // Sur un PC fixe sans batterie, les navigateurs renvoient 100 % + en charge + chargingTime 0.
+      if (battery.charging && battery.level === 1 && battery.chargingTime === 0) data['Remarque'] = 'Batterie pleine, ou appareil sans batterie (PC fixe).';
+      publish(pct <= 20 && !battery.charging ? 'warn' : 'ok', data);
+    };
+    ['levelchange', 'chargingchange', 'chargingtimechange', 'dischargingtimechange'].forEach((e) => battery.addEventListener(e, update));
+    update();
+  } else {
+    kv(out, { 'Statut': 'API Batterie non disponible sur ce navigateur (Firefox, Safari, iOS). Essayez Chrome/Edge, l’application Android ou la version PC.' });
     $('#batDrainBtn').disabled = true;
     setResult('battery', 'info', { note: 'API non disponible' });
     return;
   }
-  battery = await navigator.getBattery();
-  const update = () => {
-    const pct = Math.round(battery.level * 100);
-    const fill = $('#batFill');
-    fill.style.width = `${pct}%`;
-    $('#batPct').textContent = `${pct} %`;
-    fill.style.background = pct <= 20 ? 'var(--ko)' : pct <= 40 ? 'var(--warn)' : 'var(--ok)';
-    const data = {
-      'Niveau': `${pct} %`,
-      'En charge': battery.charging ? 'Oui ⚡' : 'Non',
-      'Temps avant charge complète': battery.charging ? (battery.chargingTime === Infinity ? 'Calcul en cours…' : fmtDur(battery.chargingTime)) : undefined,
-      'Autonomie restante': !battery.charging ? (battery.dischargingTime === Infinity ? 'Calcul en cours…' : fmtDur(battery.dischargingTime)) : undefined,
-    };
-    // Sur un PC fixe sans batterie, les navigateurs renvoient 100 % + en charge + chargingTime 0.
-    if (battery.charging && battery.level === 1 && battery.chargingTime === 0) data['Remarque'] = 'Batterie pleine, ou appareil sans batterie (PC fixe).';
-    kv(out, data);
-    setResult('battery', pct <= 20 && !battery.charging ? 'warn' : 'ok', data);
-  };
-  ['levelchange', 'chargingchange', 'chargingtimechange', 'dischargingtimechange'].forEach((e) => battery.addEventListener(e, update));
-  update();
 
   $('#batDrainBtn').onclick = async () => {
     const btn = $('#batDrainBtn');
-    if (battery.charging) { $('#batDrainOut').textContent = 'Débranchez le chargeur pour mesurer la décharge.'; return; }
+    if (readState().charging) { $('#batDrainOut').textContent = 'Débranchez le chargeur pour mesurer la décharge.'; return; }
     btn.disabled = true;
-    const start = battery.level, t0 = Date.now(), DURATION = 5 * 60 * 1000;
+    const start = readState().level, t0 = Date.now(), DURATION = 5 * 60 * 1000;
     const timer = setInterval(() => {
       const el = Date.now() - t0;
       $('#batDrainOut').textContent = `Mesure en cours… ${Math.ceil((DURATION - el) / 1000)} s restantes (laissez l’appareil tel quel).`;
@@ -176,10 +271,10 @@ async function initBattery() {
     await sleep(DURATION);
     clearInterval(timer);
     btn.disabled = false;
-    const drop = (start - battery.level) * 100, hours = (Date.now() - t0) / 3.6e6;
+    const drop = (start - readState().level) * 100, hours = (Date.now() - t0) / 3.6e6;
     const perHour = drop / hours;
     const msg = drop <= 0
-      ? 'Aucune baisse mesurable en 5 min (les navigateurs arrondissent au % près) : bon signe. Relancez pour plus de précision.'
+      ? 'Aucune baisse mesurable en 5 min (le niveau est arrondi au % près) : bon signe. Relancez pour plus de précision.'
       : `Décharge : ${fmt(perHour)} %/h → autonomie estimée de 100 % à 0 % : ${fmtDur((100 / perHour) * 3600)}.`;
     $('#batDrainOut').textContent = msg;
     setResult('battery', perHour > 30 ? 'warn' : results.battery.status, { 'Décharge mesurée': drop <= 0 ? '< 1 %/5 min' : `${fmt(perHour)} %/h` });
@@ -424,6 +519,13 @@ function initScreen() {
       'Gamut': mq('(color-gamut: rec2020)') ? 'Rec.2020' : mq('(color-gamut: p3)') ? 'Display P3' : 'sRGB',
       'HDR': mq('(dynamic-range: high)') ? 'Oui' : 'Non',
       'Orientation': screen.orientation?.type || '—',
+      // Application Android : caractéristiques physiques exactes de la dalle
+      ...(device()?.screenWidth ? {
+        'Résolution physique': `${device().screenWidth} × ${device().screenHeight} px (${device().densityDpi} dpi)`,
+        'Diagonale': `≈ ${fmt(device().screenInches)} pouces`,
+        'Fréquence max de la dalle': `${device().maxRefreshRate} Hz`,
+        'HDR': device().hdr ? 'Oui' : 'Non',
+      } : {}),
     });
   };
   info();
@@ -816,6 +918,16 @@ function initCamera() {
 function initSensors() {
   const state = {};
   const render = () => kv($('#sensOut'), state);
+  // Application Android : liste des capteurs matériels déclarés par le système.
+  const sensors = device()?.sensors;
+  if (sensors?.length) {
+    const NAMES = { accelerometer: 'Accéléromètre', gyroscope: 'Gyroscope', magnetic_field: 'Boussole', light: 'Luminosité',
+      proximity: 'Proximité', pressure: 'Baromètre', step_counter: 'Podomètre', ambient_temperature: 'Température',
+      relative_humidity: 'Humidité', heart_rate: 'Cardio', gravity: 'Gravité', rotation_vector: 'Rotation' };
+    const found = [...new Set(sensors.map((s) => NAMES[(s.type || '').replace('android.sensor.', '')]).filter(Boolean))];
+    state['Capteurs détectés'] = `${sensors.length} au total : ${found.join(', ')}`;
+    render();
+  }
   $('#sensBtn').onclick = async () => {
     try {
       // iOS 13+ exige une autorisation explicite
@@ -846,7 +958,8 @@ function initSensors() {
     setResult('sensors', gotOri || gotMot ? 'ok' : 'info', { 'Orientation': gotOri ? 'OK' : 'Absent', 'Accéléromètre': gotMot ? 'OK' : 'Absent' });
   };
   $('#vibBtn').onclick = () => {
-    const ok = navigator.vibrate ? navigator.vibrate([300, 150, 300, 150, 600]) : false;
+    const pattern = [300, 150, 300, 150, 600];
+    const ok = NATIVE ? nativeCall('vibrate', JSON.stringify(pattern)) : navigator.vibrate ? navigator.vibrate(pattern) : false;
     state['Vibreur'] = ok ? 'Commande envoyée : l’appareil a-t-il vibré ?' : 'Non pris en charge (PC, iPhone ou mode silencieux)';
     render();
   };
@@ -1035,7 +1148,7 @@ function buildReport() {
   $$('.card[data-test]').forEach((card) => {
     const r = results[card.dataset.test];
     lines.push(`■ ${card.dataset.title.toUpperCase()} — ${r ? STATUS_LABEL[r.status] : 'Non testé'}`);
-    if (r) Object.entries(r.data).forEach(([k, v]) => lines.push(`    ${k} : ${String(v).replace(/<[^>]+>/g, '')}`));
+    if (r) Object.entries(r.data).filter(([, v]) => v !== undefined && v !== null && v !== '').forEach(([k, v]) => lines.push(`    ${k} : ${String(v).replace(/<[^>]+>/g, '')}`));
     lines.push('');
   });
   const counts = Object.values(results).reduce((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {});
@@ -1043,6 +1156,7 @@ function buildReport() {
   return lines.join('\n');
 }
 function download(name, content, type) {
+  if (NATIVE && nativeCall('saveFile', name, content, type)) return; // Android : Téléchargements/DiagnoTest
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([content], { type }));
   a.download = name; a.click();
@@ -1056,6 +1170,11 @@ function initReport() {
   $('#dlTxt').onclick = () => download(`diagnotest-${stamp()}.txt`, buildReport(), 'text/plain');
   $('#dlJson').onclick = () => download(`diagnotest-${stamp()}.json`, JSON.stringify({ date: new Date().toISOString(), userAgent: navigator.userAgent, results }, null, 2), 'application/json');
   $('#copyRep').onclick = async () => { try { await navigator.clipboard.writeText(buildReport()); $('#copyRep').textContent = 'Copié ✓'; } catch { $('#copyRep').textContent = 'Échec'; } };
+  if (NATIVE?.shareText) {
+    const share = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Partager' });
+    share.onclick = () => nativeCall('shareText', 'Rapport DiagnoTest', buildReport());
+    $('#copyRep').after(share);
+  }
 }
 
 /* ------------------------------------------------------------------ */

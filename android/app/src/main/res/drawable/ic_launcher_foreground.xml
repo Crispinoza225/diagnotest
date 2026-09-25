@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Même tracé de pouls que le logo du site (M3 12h4l3-8 4 16 3-8h4), centré dans la zone sûre de 66 dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M34.2,54 L43,54 L49.6,36.4 L58.4,71.6 L65,54 L73.8,54"
+        android:strokeColor="#A3E635"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>

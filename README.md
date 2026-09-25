@@ -2,13 +2,13 @@
 
 **Testez le matériel d'un ordinateur ou d'un téléphone en quelques minutes : batterie, processeur, mémoire, écran, clavier, tactile, audio, caméra, capteurs, réseau, stockage et carte graphique.**
 
-DiagnoTest se présente en deux parties :
+DiagnoTest se présente en trois parties :
 
-| | 🌐 **Version web** | 🖥️ **Version PC (Python)** |
-|---|---|---|
-| Fonctionne sur | Téléphone, tablette, ordinateur (tout navigateur récent) | Windows, Linux, macOS |
-| Installation | Aucune : on ouvre une page web | Aucune avec **DiagnoTest.exe** (Windows), sinon Python 3.8+ et `psutil` |
-| Points forts | Écran, tactile, clavier, audio, micro, caméra, capteurs, GPU | Usure réelle de la batterie, santé des disques, températures, modèles exacts |
+| | 🌐 **Version web** | 📱 **Application Android** | 🖥️ **Version PC** |
+|---|---|---|---|
+| Fonctionne sur | Téléphone, tablette, ordinateur (tout navigateur récent) | Android 8.0 et plus | Windows (`.exe`), Linux, macOS (Python) |
+| Installation | Aucune : on ouvre une page web | **[DiagnoTest.apk](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.apk)** (moins de 100 Ko) | **[DiagnoTest.exe](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.exe)**, ou Python 3.8+ et `psutil` |
+| Points forts | Écran, tactile, clavier, audio, micro, caméra, capteurs, GPU | Tout le site, **plus** la santé de la batterie (température, tension, courant, cycles, capacité), la RAM et le stockage exacts, la puce, la liste des capteurs | Usure réelle de la batterie, santé des disques, températures, modèles exacts |
 
 👉 **Lancer la version web :** https://crispinoza225.github.io/diagnotest/
 
@@ -72,6 +72,14 @@ python -m http.server 8000
 
 Ouvrez ensuite http://localhost:8000 dans le navigateur.
 
+### Sur Android : l'application
+
+1. Sur le téléphone, téléchargez **[DiagnoTest.apk](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.apk)**.
+2. Ouvrez le fichier. Android demande d'autoriser votre navigateur à **installer des applications inconnues** : acceptez pour ce navigateur seulement.
+3. Lancez **DiagnoTest**. La caméra, le micro et la localisation ne sont demandés qu'au moment du test concerné.
+
+> L'application n'est pas sur le Play Store. Chaque [release](https://github.com/Crispinoza225/diagnotest/releases) publie l'empreinte SHA-256 de l'APK pour vérifier le fichier.
+
 ### Sur PC Windows : l'exécutable (le plus simple)
 
 1. Téléchargez **[DiagnoTest.exe](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.exe)** (environ 9 Mo, aucune installation, Python non requis).
@@ -116,13 +124,13 @@ python desktop/diagnotest.py --stress 300 --ram-mb 4096
 
 ## 🧭 Compatibilité (version web)
 
-| Fonction | Chrome / Edge (PC, Android) | Firefox | Safari (Mac, iPhone) |
-|---|:-:|:-:|:-:|
-| Batterie | ✅ | ❌ | ❌ |
-| CPU, RAM, écran, clavier, GPU | ✅ | ✅ | ✅ |
-| Vibreur | ✅ Android | ✅ Android | ❌ |
-| Gyroscope / accéléromètre | ✅ | ✅ | ✅ (autorisation demandée) |
-| Micro, caméra, GPS | ✅ HTTPS | ✅ HTTPS | ✅ HTTPS |
+| Fonction | Application Android | Chrome / Edge (PC, Android) | Firefox | Safari (Mac, iPhone) |
+|---|:-:|:-:|:-:|:-:|
+| Batterie | ✅ détaillée | ✅ | ❌ | ❌ |
+| CPU, RAM, écran, clavier, GPU | ✅ | ✅ | ✅ | ✅ |
+| Vibreur | ✅ | ✅ Android | ✅ Android | ❌ |
+| Gyroscope / accéléromètre | ✅ | ✅ | ✅ | ✅ (autorisation demandée) |
+| Micro, caméra, GPS | ✅ | ✅ HTTPS | ✅ HTTPS | ✅ HTTPS |
 
 ## ⚠️ Avertissements
 
