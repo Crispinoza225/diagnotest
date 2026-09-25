@@ -358,6 +358,7 @@ dialog pre {
 .foot a { color: var(--text); }
 
 @media (max-width: 560px) {
+  .verdict span { flex-basis: 100%; margin: 0 0 2px; }
   .hero-inner { padding: 40px 0 120px; }
   .navlink.hide-sm { display: none; }
   .card { padding: 18px; }

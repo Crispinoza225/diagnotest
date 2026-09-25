@@ -26,6 +26,14 @@ jobs:
           bash ios/prepare.sh
           xcodebuild -version
 
+      - name: Table officielle des modèles (nom ↔ identifiant)
+        run: |
+          xcrun simctl list devicetypes -j | python3 -c "
+          import json, sys
+          for d in json.load(sys.stdin)['devicetypes']:
+              if d.get('productFamily') == 'iPhone' and d.get('modelIdentifier'):
+                  print(d['modelIdentifier'], '=', d['name'])"
+
       - name: Compiler pour le simulateur
         working-directory: ios
         run: |
@@ -39,7 +47,7 @@ jobs:
           import json, sys
           devs = json.load(sys.stdin)['devices']
           print(next(d['udid'] for rt, lst in sorted(devs.items(), reverse=True) if 'iOS' in rt for d in lst if d['name'].startswith('iPhone')))")
-          echo "Simulateur : $UDID"
+          echo "Simulateur : $UDID — $(xcrun simctl list devices | grep "$UDID" | sed 's/ (.*//' | xargs)"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl install "$UDID" ios/build/sim/Build/Products/Debug-iphonesimulator/DiagnoTest.app
@@ -51,7 +59,8 @@ jobs:
             else
               xcrun simctl launch "$UDID" io.github.crispinoza225.diagnotest -anchor "$anchor"
             fi
-            sleep 12
+            # Le premier lancement démarre les processus WebKit : il est nettement plus long.
+            if [ "$anchor" = accueil ]; then sleep 30; else sleep 12; fi
             xcrun simctl io "$UDID" screenshot "captures/$anchor.png"
           done
           echo "--- Erreurs JavaScript remontées par l'app (vide = aucune) ---"
