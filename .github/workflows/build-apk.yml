@@ -19,7 +19,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: android-actions/setup-android@v3
+      # Le SDK Android est préinstallé sur les runners Ubuntu de GitHub (variable ANDROID_HOME).
 
       # La clé de signature n'est jamais dans le dépôt : elle vient des secrets du dépôt.
       - name: Préparer la clé de signature
