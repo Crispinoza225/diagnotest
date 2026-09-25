@@ -10,11 +10,15 @@ diagnotest/
 ├── js/design.js            # Couche visuelle : animations et formes SVG génératives
 ├── desktop/
 │   ├── diagnotest.py       # Version PC en ligne de commande
-│   └── requirements.txt    # psutil
+│   ├── requirements.txt    # psutil
+│   ├── build_exe.ps1       # Compilation en DiagnoTest.exe (PyInstaller)
+│   ├── version_info.txt    # Métadonnées Windows de l'exécutable
+│   └── assets/             # Icône de l'application
 ├── docs/
 │   ├── GUIDE.md            # Guide d'utilisation
 │   └── TECHNIQUE.md        # Ce fichier
-├── .github/workflows/pages.yml   # Déploiement automatique sur GitHub Pages
+├── .github/workflows/pages.yml       # Déploiement automatique sur GitHub Pages
+├── .github/workflows/build-exe.yml   # Compilation et publication de DiagnoTest.exe
 ├── LICENSE
 └── README.md
 ```
@@ -103,17 +107,34 @@ L'interface s'inspire de quatre sources, réimplémentées en CSS et JavaScript 
 
 Le benchmark CPU utilise `multiprocessing` (un processus par thread logique) pour contourner le GIL de Python.
 
-### Créer un exécutable Windows (.exe)
+### Exécutable Windows (.exe)
+
+Il est compilé avec PyInstaller en un seul fichier qui embarque Python et `psutil`, avec l'icône `desktop/assets/diagnotest.ico` et les métadonnées de `desktop/version_info.txt`.
+
+**Compilation locale :**
 
 ```bash
-pip install pyinstaller psutil
+powershell -ExecutionPolicy Bypass -File desktop/build_exe.ps1
+```
+
+Le résultat se trouve dans `dist/DiagnoTest.exe`.
+
+**Publication d'une version :** le workflow `.github/workflows/build-exe.yml` compile l'exécutable sur un runner Windows propre, le teste, calcule son empreinte SHA-256, puis le joint à une Release GitHub. Il suffit de pousser une étiquette :
+
+```bash
+git tag v1.0.1
 ```
 
 ```bash
-pyinstaller --onefile --name DiagnoTest desktop/diagnotest.py
+git push origin v1.0.1
 ```
 
-L'exécutable est créé dans `dist/DiagnoTest.exe`. L'appel `mp.freeze_support()` est déjà présent pour que `multiprocessing` fonctionne une fois le script empaqueté.
+Pensez à changer `__version__` dans `diagnotest.py` et les numéros dans `version_info.txt`.
+
+Détails propres à l'exécutable :
+- l'appel `mp.freeze_support()` permet à `multiprocessing` (benchmark CPU) de fonctionner une fois compilé ;
+- lancé par double-clic, sans argument, il attend Entrée avant de se fermer pour qu'on puisse lire les résultats ;
+- il n'est pas signé : Windows SmartScreen affiche donc un avertissement au premier lancement.
 
 ## Déploiement
 

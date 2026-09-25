@@ -32,6 +32,8 @@ try:
 except ImportError:  # le script fonctionne en mode dégradé sans psutil
     psutil = None
 
+__version__ = "1.0.0"
+
 IS_WIN, IS_LINUX, IS_MAC = sys.platform == "win32", sys.platform.startswith("linux"), sys.platform == "darwin"
 
 # --------------------------------------------------------------------------- #
@@ -132,8 +134,9 @@ def test_system() -> None:
         "Machine": platform.node(),
         "Architecture": platform.machine(),
         "Processeur": cpu_model(),
-        "Python": platform.python_version(),
     }
+    if not getattr(sys, "frozen", False):  # sans intérêt dans le .exe
+        data["Python"] = platform.python_version()
     if IS_WIN:
         data["Fabricant / modèle"] = ps("$c=Get-CimInstance Win32_ComputerSystem; $c.Manufacturer + ' ' + $c.Model")
         data["Numéro de série"] = ps("(Get-CimInstance Win32_BIOS).SerialNumber")
@@ -451,14 +454,15 @@ def test_network() -> None:
                 speed = f", {st.speed} Mbit/s" if st.speed else ""
                 data[f"Interface {name}"] = f"{ipv4}{speed}"
     # Plusieurs serveurs : certains réseaux (entreprise, pare-feu) en bloquent un ou deux.
-    latencies, target = [], None
+    latencies, target, last_error = [], None, None
     for host, port in (("1.1.1.1", 443), ("8.8.8.8", 53), ("github.com", 443), ("www.google.com", 80)):
         for _ in range(5):
             t = time.perf_counter()
             try:
                 with socket.create_connection((host, port), timeout=3):
                     latencies.append((time.perf_counter() - t) * 1000)
-            except OSError:
+            except OSError as e:
+                last_error = e
                 break
         if latencies:
             target = host
@@ -469,8 +473,11 @@ def test_network() -> None:
         data[f"Latence (TCP {target})"] = f"{latencies[len(latencies) // 2]:.0f} ms"
         status = "ok" if latencies[len(latencies) // 2] < 150 else "warn"
     else:
-        data["Internet"] = "Pas de connexion"
-        status = "ko"
+        # WinError 10013 / EACCES : la connexion est refusée localement (pare-feu, antivirus), pas par le réseau.
+        blocked = getattr(last_error, "winerror", None) == 10013 or getattr(last_error, "errno", None) == 13
+        data["Internet"] = ("Connexion bloquée pour ce programme par le pare-feu ou l'antivirus" if blocked
+                            else f"Pas de connexion ({last_error})" if last_error else "Pas de connexion")
+        status = "warn" if blocked else "ko"  # le matériel réseau n'est pas en cause
     try:
         socket.gethostbyname("github.com")
         data["DNS"] = "OK"
@@ -496,11 +503,15 @@ def main() -> None:
     parser.add_argument("--ram-mb", type=int, default=1024, help="quantité de RAM à tester en Mo (défaut 1024)")
     parser.add_argument("--disk-mb", type=int, default=512, help="taille du fichier de benchmark disque (défaut 512)")
     parser.add_argument("--output", default=".", help="dossier où enregistrer le rapport")
+    parser.add_argument("--version", action="version", version=f"DiagnoTest Desktop {__version__}")
     args = parser.parse_args()
     if args.quick:
         args.stress, args.disk_mb, args.ram_mb = 0, 0, min(args.ram_mb, 256)
 
-    print(f"{C['b']}DiagnoTest Desktop{C['0']} — {datetime.now():%d/%m/%Y %H:%M}")
+    print(f"{C['b']}DiagnoTest Desktop {__version__}{C['0']} — {datetime.now():%d/%m/%Y %H:%M}")
+    if not args.quick and not args.only:
+        print(f"{C['dim']}Diagnostic complet : environ {args.stress // 60 + 1} à {args.stress // 60 + 2} minutes. "
+              f"Ctrl+C pour interrompre, --quick pour un test rapide.{C['0']}")
     if not psutil:
         print(f"{C['warn']}⚠ Module psutil absent : certains tests seront limités. Installez-le : pip install psutil{C['0']}")
 
@@ -545,4 +556,12 @@ def main() -> None:
 
 if __name__ == "__main__":
     mp.freeze_support()  # nécessaire si le script est empaqueté en .exe (PyInstaller)
-    main()
+    try:
+        main()
+    finally:
+        # Lancé par double-clic, l'exécutable ferait disparaître la fenêtre avant qu'on lise les résultats.
+        if getattr(sys, "frozen", False) and len(sys.argv) == 1:
+            try:
+                input("\nAppuyez sur Entrée pour fermer…")
+            except (EOFError, KeyboardInterrupt):
+                pass

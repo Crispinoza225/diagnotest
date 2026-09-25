@@ -1,0 +1,37 @@
+name: Compilation de DiagnoTest.exe
+
+# Se déclenche en poussant une étiquette de version (ex. : git tag v1.0.0 && git push --tags)
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compiler l'exécutable
+        run: powershell -ExecutionPolicy Bypass -File desktop/build_exe.ps1
+      - name: Test rapide de l'exécutable
+        run: dist\DiagnoTest.exe --only system cpu ram --stress 0 --ram-mb 64 --output rapport-ci
+      - name: Empreinte SHA-256
+        run: (Get-FileHash dist\DiagnoTest.exe -Algorithm SHA256).Hash | Out-File -Encoding ascii dist\DiagnoTest.exe.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DiagnoTest-windows
+          path: dist/
+      - name: Publier la release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/DiagnoTest.exe
+            dist/DiagnoTest.exe.sha256
+          generate_release_notes: true

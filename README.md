@@ -7,7 +7,7 @@ DiagnoTest se présente en deux parties :
 | | 🌐 **Version web** | 🖥️ **Version PC (Python)** |
 |---|---|---|
 | Fonctionne sur | Téléphone, tablette, ordinateur (tout navigateur récent) | Windows, Linux, macOS |
-| Installation | Aucune : on ouvre une page web | Python 3.8+ (et `psutil`, recommandé) |
+| Installation | Aucune : on ouvre une page web | Aucune avec **DiagnoTest.exe** (Windows), sinon Python 3.8+ et `psutil` |
 | Points forts | Écran, tactile, clavier, audio, micro, caméra, capteurs, GPU | Usure réelle de la batterie, santé des disques, températures, modèles exacts |
 
 👉 **Lancer la version web :** https://crispinoza225.github.io/diagnotest/
@@ -71,6 +71,15 @@ python -m http.server 8000
 ```
 
 Ouvrez ensuite http://localhost:8000 dans le navigateur.
+
+### Sur PC Windows : l'exécutable (le plus simple)
+
+1. Téléchargez **[DiagnoTest.exe](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.exe)** (environ 9 Mo, aucune installation, Python non requis).
+2. Double-cliquez dessus. Le diagnostic complet prend 2 à 3 minutes, et le rapport est enregistré à côté de l'exécutable.
+
+> Windows SmartScreen peut afficher « Windows a protégé votre ordinateur », car l'exécutable n'est pas signé. Cliquez sur **Informations complémentaires → Exécuter quand même**. L'empreinte SHA-256 publiée avec chaque [release](https://github.com/Crispinoza225/diagnotest/releases) permet de vérifier le fichier, et l'exécutable est compilé par GitHub Actions directement à partir du code source.
+
+Les options fonctionnent aussi en ligne de commande, par exemple `DiagnoTest.exe --quick`.
 
 ### Sur PC (version Python)
 

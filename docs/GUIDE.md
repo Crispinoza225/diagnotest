@@ -125,7 +125,15 @@ Affiche une fractale animée très coûteuse à calculer pendant 10 s.
 
 ## Version PC (Python)
 
-### Installation
+### Le plus simple sous Windows : DiagnoTest.exe
+1. Téléchargez [DiagnoTest.exe](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.exe).
+2. Double-cliquez dessus. Si SmartScreen s'affiche, cliquez sur **Informations complémentaires → Exécuter quand même** (l'exécutable n'est pas signé).
+3. Lisez les résultats, puis appuyez sur Entrée pour fermer. Le rapport `.txt` / `.json` est enregistré dans le dossier de l'exécutable.
+4. Pour lire la température du processeur : clic droit sur l'exécutable → **Exécuter en tant qu'administrateur**.
+
+Toutes les options ci-dessous fonctionnent aussi avec l'exécutable, depuis un terminal : `DiagnoTest.exe --quick`.
+
+### Installation avec Python (Windows, Linux, macOS)
 1. Installez [Python 3.8 ou plus récent](https://www.python.org/downloads/). Sous Windows, cochez « Add Python to PATH ».
 2. Téléchargez le dépôt : bouton **Code → Download ZIP** sur GitHub, puis décompressez-le.
 3. Ouvrez un terminal dans le dossier et installez la dépendance :
@@ -190,6 +198,9 @@ La version PC enregistre automatiquement `diagnotest-<machine>-<date>.txt` et `.
 ---
 
 ## Questions fréquentes
+
+**La version PC indique « Connexion bloquée pour ce programme ».**
+Un pare-feu ou un antivirus empêche DiagnoTest d'ouvrir une connexion : le Wi-Fi et la carte réseau ne sont pas en cause. Autorisez le programme dans votre pare-feu si vous voulez mesurer la latence.
 
 **La batterie affiche « API non disponible ».**
 Firefox et Safari ne fournissent pas cette information. Utilisez Chrome ou Edge, ou la version PC.
