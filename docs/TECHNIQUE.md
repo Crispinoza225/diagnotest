@@ -17,12 +17,18 @@ diagnotest/
 ├── android/                # Application Android (WebView + pont natif Java, sans dépendance)
 │   ├── app/build.gradle    # Copie le site dans les assets à chaque compilation
 │   └── app/src/main/java/…/MainActivity.java, DiagnoBridge.java
+├── ios/                    # Application iOS (Swift, WKWebView + pont natif, sans dépendance)
+│   ├── project.yml         # Description du projet, générée en .xcodeproj par XcodeGen
+│   ├── prepare.sh          # Copie le site dans ios/www puis lance XcodeGen
+│   └── DiagnoTest/         # AppDelegate.swift, WebViewController.swift, Bridge.swift, icône
+├── manifest.webmanifest, sw.js, icons/   # Application web installable (PWA, hors ligne)
 ├── docs/
 │   ├── GUIDE.md            # Guide d'utilisation
 │   └── TECHNIQUE.md        # Ce fichier
 ├── .github/workflows/pages.yml       # Déploiement automatique sur GitHub Pages
 ├── .github/workflows/build-exe.yml   # Compilation et publication de DiagnoTest.exe
 ├── .github/workflows/build-apk.yml   # Compilation et publication de DiagnoTest.apk
+├── .github/workflows/build-ios.yml   # Compilation iOS, test dans le simulateur, .ipa non signé
 ├── LICENSE
 └── README.md
 ```
@@ -186,9 +192,53 @@ Sans ce fichier, l'APK est signé avec la clé de debug, ce qui convient pour le
 
 Pour que GitHub Actions signe et publie l'APK à chaque étiquette `v*`, ajoutez deux secrets au dépôt (*Settings → Secrets and variables → Actions*) : `ANDROID_KEYSTORE_B64` (la clé encodée en base64) et `ANDROID_KEYSTORE_PASSWORD`. Sans ces secrets, le workflow compile quand même un APK de test, mais ne le publie pas dans la release.
 
+## Application iOS
+
+*(voir aussi « Application web installable » ci-dessous)*
+
+### Architecture
+- `WebViewController` affiche le site dans un `WKWebView`, chargé en `file://` depuis le dossier `www` du bundle. WebKit considère `file://` comme un contexte sécurisé, ce qui permet caméra, micro et géolocalisation.
+- `Bridge.swift` injecte au démarrage de la page un script qui expose `window.DiagnoNative`, avec **la même interface que le pont Android**. `js/app.js` n'a donc qu'un seul chemin de code : `const NATIVE = window.DiagnoNative || window.DiagnoAndroid`.
+- Les messages WebKit sont asynchrones. Les lectures (`getDeviceInfo`, `getBatteryInfo`) sont donc servies depuis `window.__diagIOS`, que Swift remplit à l'injection puis met à jour à chaque notification (niveau, état de charge, état thermique, économie d'énergie). Les actions (`vibrate`, `saveFile`, `shareText`, `setSystemBarColor`, `setImmersive`) sont envoyées à Swift via `webkit.messageHandlers.diag`.
+- Mesures natives : identifiant du modèle (`uname`) et table nom/puce, `ProcessInfo` (RAM, cœurs, état thermique, économie d'énergie), capacité du volume, `UIScreen` (résolution native, `maximumFramesPerSecond`, EDR), CoreMotion (accéléromètre, gyroscope, magnétomètre, baromètre, podomètre), `LAContext` (Face ID / Touch ID), vibrations Core Haptics (repli sur la vibration système).
+- **Limite d'iOS** : aucune API publique ne donne la santé, la température, la tension ou les cycles de la batterie.
+- `setImmersive` masque la barre d'état et l'indicateur d'accueil pendant les mires d'écran, et étend la WebView sous les zones sûres.
+
+### Compiler sur un Mac
+```bash
+brew install xcodegen
+```
+
+```bash
+bash ios/prepare.sh
+```
+
+```bash
+open ios/DiagnoTest.xcodeproj
+```
+
+Dans Xcode, choisissez votre équipe dans *Signing & Capabilities*, puis lancez l'app sur un iPhone branché. Une compilation Debug rend la WebView inspectable depuis Safari (*Développement*).
+
+### Intégration continue
+`.github/workflows/build-ios.yml` s'exécute sur un Mac de GitHub :
+1. il génère le projet ;
+2. il compile pour le simulateur ;
+3. il lance l'app dans un simulateur d'iPhone et enregistre des captures de l'accueil, du système, de la batterie, de l'écran et des capteurs (artefact `captures-simulateur-ios`) ;
+4. il remonte les erreurs JavaScript captées par l'app ;
+5. il compile pour iPhone sans signature et produit `DiagnoTest-iOS-non-signe.ipa`, joint à la release à chaque étiquette `v*`.
+
+### Publier sur l'App Store ou TestFlight
+Il faut un compte Apple Developer. Il faut aussi un Mac, ou ajouter au workflow un certificat de distribution et un profil de provisionnement dans les secrets du dépôt. Ensuite : *Product → Archive* dans Xcode, puis *Distribute App*. L'app ne collecte aucune donnée, ce qui simplifie la fiche de confidentialité de l'App Store.
+
+## Application web installable (PWA)
+- `manifest.webmanifest` : nom, icônes (dont une icône *maskable* pour Android) et affichage `standalone`.
+- `sw.js` : le service worker met le site en cache. Pour les fichiers du site, le réseau passe d'abord (mises à jour immédiates) et le cache sert en secours. Pour les polices, le cache passe d'abord. Le test réseau n'est jamais mis en cache, sinon il mesurerait le cache. Changez `CACHE` à chaque version.
+- Le service worker n'est enregistré ni dans les applications Android et iOS, ni hors HTTPS.
+- Sur iPhone, `design.js` affiche une bannière « Sur l'écran d'accueil » dans Safari, sauf si l'app est déjà installée ou si l'utilisateur a fermé la bannière.
+
 ## Déploiement
 
-Le workflow `.github/workflows/pages.yml` publie le site sur GitHub Pages à chaque push sur `main`. Pour un autre hébergeur (Netlify, Vercel, serveur Apache ou Nginx), il suffit de copier `index.html`, `css/` et `js/`.
+Le workflow `.github/workflows/pages.yml` publie le site sur GitHub Pages à chaque push sur `main`. Pour un autre hébergeur (Netlify, Vercel, serveur Apache ou Nginx), il suffit de copier `index.html`, `css/`, `js/`, `icons/`, `manifest.webmanifest` et `sw.js`.
 
 ## Confidentialité
 

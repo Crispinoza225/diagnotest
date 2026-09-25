@@ -67,6 +67,9 @@ enum DeviceInfo {
         "iPhone17,3": ("iPhone 16", "A18"), "iPhone17,4": ("iPhone 16 Plus", "A18"),
         "iPhone17,1": ("iPhone 16 Pro", "A18 Pro"), "iPhone17,2": ("iPhone 16 Pro Max", "A18 Pro"),
         "iPhone17,5": ("iPhone 16e", "A18"),
+        "iPhone18,3": ("iPhone 17", "A19"), "iPhone18,4": ("iPhone Air", "A19 Pro"),
+        "iPhone18,1": ("iPhone 17 Pro", "A19 Pro"), "iPhone18,2": ("iPhone 17 Pro Max", "A19 Pro"),
+        "iPhone18,5": ("iPhone 17e", ""), // puce non confirmée : seul le nom est affiché
     ]
 
     static func device() -> [String: Any] {
@@ -85,7 +88,7 @@ enum DeviceInfo {
             "maxRefreshRate": screen.maximumFramesPerSecond,
             "uptimeMs": Int(ProcessInfo.processInfo.systemUptime * 1000),
         ]
-        if let chip = known?.chip {
+        if let chip = known?.chip, !chip.isEmpty {
             o["socManufacturer"] = "Apple"
             o["socModel"] = chip
         }

@@ -2,13 +2,13 @@
 
 **Testez le matériel d'un ordinateur ou d'un téléphone en quelques minutes : batterie, processeur, mémoire, écran, clavier, tactile, audio, caméra, capteurs, réseau, stockage et carte graphique.**
 
-DiagnoTest se présente en trois parties :
+DiagnoTest existe en quatre versions :
 
-| | 🌐 **Version web** | 📱 **Application Android** | 🖥️ **Version PC** |
-|---|---|---|---|
-| Fonctionne sur | Téléphone, tablette, ordinateur (tout navigateur récent) | Android 8.0 et plus | Windows (`.exe`), Linux, macOS (Python) |
-| Installation | Aucune : on ouvre une page web | **[DiagnoTest.apk](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.apk)** (moins de 100 Ko) | **[DiagnoTest.exe](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.exe)**, ou Python 3.8+ et `psutil` |
-| Points forts | Écran, tactile, clavier, audio, micro, caméra, capteurs, GPU | Tout le site, **plus** la santé de la batterie (température, tension, courant, cycles, capacité), la RAM et le stockage exacts, la puce, la liste des capteurs | Usure réelle de la batterie, santé des disques, températures, modèles exacts |
+| | 🌐 **Version web** | 📱 **Application Android** | 🍎 **iPhone / iPad** | 🖥️ **Version PC** |
+|---|---|---|---|---|
+| Fonctionne sur | Téléphone, tablette, ordinateur (tout navigateur récent) | Android 8.0 et plus | iOS / iPadOS 15 et plus | Windows (`.exe`), Linux, macOS (Python) |
+| Installation | Aucune : on ouvre une page web | **[DiagnoTest.apk](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.apk)** (moins de 100 Ko) | Depuis Safari : **Partager → Sur l'écran d'accueil**, ou [l'application native](#sur-iphone-et-ipad) | **[DiagnoTest.exe](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.exe)**, ou Python 3.8+ et `psutil` |
+| Points forts | Écran, tactile, clavier, audio, micro, caméra, capteurs, GPU | Tout le site, **plus** la santé de la batterie (température, tension, courant, cycles, capacité), la RAM et le stockage exacts, la puce, la liste des capteurs | Tout le site, hors ligne et en plein écran ; l'app native ajoute modèle et puce, RAM, stockage, écran, état thermique et vraies vibrations | Usure réelle de la batterie, santé des disques, températures, modèles exacts |
 
 👉 **Lancer la version web :** https://crispinoza225.github.io/diagnotest/
 
@@ -80,6 +80,19 @@ Ouvrez ensuite http://localhost:8000 dans le navigateur.
 
 > L'application n'est pas sur le Play Store. Chaque [release](https://github.com/Crispinoza225/diagnotest/releases) publie l'empreinte SHA-256 de l'APK pour vérifier le fichier.
 
+### Sur iPhone et iPad
+
+**Le plus simple : l'application web installable**, qui ne demande ni compte ni installation.
+1. Ouvrez **https://crispinoza225.github.io/diagnotest/** dans **Safari**.
+2. Touchez **Partager**, puis **Sur l'écran d'accueil**.
+3. DiagnoTest apparaît avec son icône, s'ouvre en plein écran et fonctionne hors ligne.
+
+**L'application native**, qui ajoute les mesures natives :
+- **Sideloading** : téléchargez **[DiagnoTest-iOS-non-signe.ipa](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest-iOS-non-signe.ipa)**, puis installez-la avec [AltStore](https://altstore.io) ou [Sideloadly](https://sideloadly.io) et votre identifiant Apple gratuit. Ces outils signent l'app pour votre iPhone. Avec un identifiant gratuit, la signature expire au bout de 7 jours.
+- **App Store / TestFlight** : il faut un compte Apple Developer (99 $/an) et un Mac. Voir [docs/TECHNIQUE.md](docs/TECHNIQUE.md#application-ios).
+
+> iOS ne donne aux applications ni la santé, ni la température, ni les cycles de la batterie. Consultez *Réglages → Batterie → État de la batterie*.
+
 ### Sur PC Windows : l'exécutable (le plus simple)
 
 1. Téléchargez **[DiagnoTest.exe](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.exe)** (environ 9 Mo, aucune installation, Python non requis).
@@ -124,13 +137,14 @@ python desktop/diagnotest.py --stress 300 --ram-mb 4096
 
 ## 🧭 Compatibilité (version web)
 
-| Fonction | Application Android | Chrome / Edge (PC, Android) | Firefox | Safari (Mac, iPhone) |
-|---|:-:|:-:|:-:|:-:|
-| Batterie | ✅ détaillée | ✅ | ❌ | ❌ |
-| CPU, RAM, écran, clavier, GPU | ✅ | ✅ | ✅ | ✅ |
-| Vibreur | ✅ | ✅ Android | ✅ Android | ❌ |
-| Gyroscope / accéléromètre | ✅ | ✅ | ✅ | ✅ (autorisation demandée) |
-| Micro, caméra, GPS | ✅ | ✅ HTTPS | ✅ HTTPS | ✅ HTTPS |
+| Fonction | Application Android | Application iOS | Chrome / Edge (PC, Android) | Firefox | Safari (Mac, iPhone) |
+|---|:-:|:-:|:-:|:-:|:-:|
+| Batterie | ✅ détaillée | ✅ niveau, état thermique | ✅ | ❌ | ❌ |
+| CPU, RAM, écran, clavier, GPU | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Vibreur | ✅ | ✅ Core Haptics | ✅ Android | ✅ Android | ❌ |
+| Gyroscope / accéléromètre | ✅ | ✅ | ✅ | ✅ | ✅ (autorisation demandée) |
+| Micro, caméra, GPS | ✅ | ✅ | ✅ HTTPS | ✅ HTTPS | ✅ HTTPS |
+| Hors ligne | ✅ | ✅ | ✅ une fois installé (PWA) | ✅ PWA | ✅ PWA |
 
 ## ⚠️ Avertissements
 

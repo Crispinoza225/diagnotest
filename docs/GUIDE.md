@@ -5,6 +5,7 @@ Ce guide explique comment faire chaque test et comment lire les résultats. Si v
 - [Avant de commencer](#avant-de-commencer)
 - [Tests de la version web](#tests-de-la-version-web)
 - [Application Android](#application-android)
+- [iPhone et iPad](#iphone-et-ipad)
 - [Version PC (Python)](#version-pc-python)
 - [Le rapport](#le-rapport)
 - [Questions fréquentes](#questions-fréquentes)
@@ -150,6 +151,35 @@ L'application contient tout le site, et elle fonctionne donc hors ligne, à l'ex
 | Cycles | Une batterie de téléphone perd en général 20 % de capacité vers 500 à 800 cycles. |
 
 > La capacité estimée est approximative (±10 %). Elle est plus fiable entre 50 et 100 % de charge. Certains constructeurs fournissent un compteur incohérent : l'application le détecte et affiche « Non mesurable » plutôt qu'un faux diagnostic.
+
+---
+
+## iPhone et iPad
+
+Deux possibilités, selon ce que vous voulez.
+
+### 1. L'application web installable (recommandée)
+Aucun compte ni téléchargement : c'est le site, installé comme une app.
+1. Ouvrez **https://crispinoza225.github.io/diagnotest/** dans **Safari**. Dans Chrome sur iPhone, utilisez le menu **Partager** de la même façon.
+2. Touchez **Partager** (le carré avec une flèche vers le haut).
+3. Faites défiler, puis touchez **Sur l'écran d'accueil** et **Ajouter**.
+
+DiagnoTest s'ouvre ensuite en plein écran, sans barre de Safari, et fonctionne **hors ligne**, sauf le test réseau. Le site affiche lui-même ces instructions quand vous l'ouvrez dans Safari.
+
+### 2. L'application native (.ipa)
+Elle ajoute des mesures natives : modèle exact et puce, RAM, stockage, résolution native et fréquence maximale de l'écran (120 Hz sur les modèles Pro), état thermique, mode économie d'énergie, **vraies vibrations** (Core Haptics), et partage du rapport vers Fichiers, Mail, AirDrop…
+
+Apple n'autorise pas l'installation directe d'un fichier `.ipa`. Il faut le faire signer :
+- **Avec AltStore ou Sideloadly** (gratuit) : installez l'outil sur votre ordinateur, branchez l'iPhone, puis ouvrez [DiagnoTest-iOS-non-signe.ipa](https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest-iOS-non-signe.ipa) avec l'outil et connectez-vous avec votre identifiant Apple. Avec un compte gratuit, l'app doit être re-signée **tous les 7 jours**, ce qu'AltStore fait automatiquement.
+- **Avec un compte Apple Developer** (99 $/an) : distribution par TestFlight ou l'App Store. Voir la [documentation technique](TECHNIQUE.md#application-ios).
+
+### Ce qu'iOS ne permet pas de mesurer
+| Mesure | Où la trouver sur iPhone |
+|---|---|
+| Santé et capacité maximale de la batterie | *Réglages → Batterie → État de la batterie et recharge* |
+| Nombre de cycles (iPhone 15 et plus) | *Réglages → Général → Informations* |
+| Température de la batterie | Non accessible. En cas de surchauffe, l'état thermique de l'app passe à « Élevé » ou « Critique ». |
+| Vibreur depuis Safari | Seule l'app native peut faire vibrer l'iPhone. |
 
 ---
 

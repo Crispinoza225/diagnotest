@@ -32,7 +32,7 @@ try:
 except ImportError:  # le script fonctionne en mode dégradé sans psutil
     psutil = None
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 IS_WIN, IS_LINUX, IS_MAC = sys.platform == "win32", sys.platform.startswith("linux"), sys.platform == "darwin"
 
