@@ -249,12 +249,29 @@
     }
   }
 
+  /* ---------------- PWA : mode hors ligne et invitation à l'installation sur iPhone ---------------- */
+  const inNativeApp = !!(window.DiagnoAndroid || window.DiagnoNative);
+  if ('serviceWorker' in navigator && !inNativeApp && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* hors ligne indisponible, le site fonctionne quand même */ });
+  }
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('dt-ios-install') === 'no'; } catch { /* stockage bloqué */ }
+  if (isIOS && !standalone && !inNativeApp && !dismissed) {
+    $('#iosInstall').hidden = false;
+    $('#iosInstallClose').onclick = () => {
+      $('#iosInstall').hidden = true;
+      try { localStorage.setItem('dt-ios-install', 'no'); } catch { /* ignoré */ }
+    };
+  }
+
   /* ---------------- Couleur de la barre du navigateur mobile selon le thème ---------------- */
   const syncThemeColor = () => {
     const meta = $('meta[name="theme-color"]');
     const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
     if (meta) meta.content = bg;
-    try { window.DiagnoAndroid?.setSystemBarColor?.(bg); } catch { /* hors application Android */ }
+    try { (window.DiagnoNative || window.DiagnoAndroid)?.setSystemBarColor?.(bg); } catch { /* hors application */ }
   };
   new MutationObserver(syncThemeColor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   syncThemeColor();

@@ -1,0 +1,8 @@
+# Générés par prepare.sh / Xcode
+www/
+DiagnoTest.xcodeproj/
+DiagnoTest/Info.plist
+build/
+Payload/
+*.ipa
+xcuserdata/

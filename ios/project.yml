@@ -1,0 +1,55 @@
+# Description du projet Xcode, générée en DiagnoTest.xcodeproj par XcodeGen (voir prepare.sh).
+name: DiagnoTest
+options:
+  bundleIdPrefix: io.github.crispinoza225
+  deploymentTarget:
+    iOS: "15.0"
+settings:
+  base:
+    MARKETING_VERSION: "1.2.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  DiagnoTest:
+    type: application
+    platform: iOS
+    sources:
+      - path: DiagnoTest
+      - path: www            # site copié par prepare.sh, embarqué tel quel dans l'app
+        type: folder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.crispinoza225.diagnotest
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+    scheme: {}
+    info:
+      path: DiagnoTest/Info.plist
+      properties:
+        CFBundleDisplayName: DiagnoTest
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UIViewControllerBasedStatusBarAppearance: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+        NSCameraUsageDescription: "Le test de caméra affiche l'image de vos caméras pour vérifier qu'elles fonctionnent. Rien n'est enregistré."
+        NSMicrophoneUsageDescription: "Le test du micro mesure le niveau sonore et permet de réécouter un court enregistrement, qui reste sur l'appareil."
+        NSLocationWhenInUseUsageDescription: "Le test GPS vérifie que la localisation fonctionne. La position n'est jamais enregistrée ni envoyée."
+        NSMotionUsageDescription: "Le test des capteurs vérifie l'accéléromètre, le gyroscope et le podomètre."

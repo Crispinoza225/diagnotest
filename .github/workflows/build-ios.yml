@@ -1,0 +1,92 @@
+name: Compilation iOS
+
+# Compile l'application iOS sur un Mac de GitHub, la lance dans le simulateur (captures d'écran
+# en artefact) et produit un .ipa non signé. Aux étiquettes v*, l'.ipa est joint à la release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash   # active pipefail : une erreur de xcodebuild fait échouer l'étape
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Générer le projet Xcode
+        run: |
+          brew install xcodegen
+          bash ios/prepare.sh
+          xcodebuild -version
+
+      - name: Compiler pour le simulateur
+        working-directory: ios
+        run: |
+          xcodebuild -project DiagnoTest.xcodeproj -scheme DiagnoTest -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/sim CODE_SIGNING_ALLOWED=NO build | tail -n 40
+
+      - name: Lancer dans le simulateur et faire des captures
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devs = json.load(sys.stdin)['devices']
+          print(next(d['udid'] for rt, lst in sorted(devs.items(), reverse=True) if 'iOS' in rt for d in lst if d['name'].startswith('iPhone')))")
+          echo "Simulateur : $UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" ios/build/sim/Build/Products/Debug-iphonesimulator/DiagnoTest.app
+          mkdir -p captures
+          for anchor in accueil t-system t-battery t-screen t-sensors; do
+            xcrun simctl terminate "$UDID" io.github.crispinoza225.diagnotest 2>/dev/null || true
+            if [ "$anchor" = accueil ]; then
+              xcrun simctl launch "$UDID" io.github.crispinoza225.diagnotest
+            else
+              xcrun simctl launch "$UDID" io.github.crispinoza225.diagnotest -anchor "$anchor"
+            fi
+            sleep 12
+            xcrun simctl io "$UDID" screenshot "captures/$anchor.png"
+          done
+          echo "--- Erreurs JavaScript remontées par l'app (vide = aucune) ---"
+          xcrun simctl spawn "$UDID" log show --last 10m --style compact \
+            --predicate 'eventMessage CONTAINS "[DiagnoTest JS]"' | grep "DiagnoTest JS" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: captures-simulateur-ios
+          path: captures/
+
+      - name: Compiler pour iPhone (.ipa non signé)
+        working-directory: ios
+        run: |
+          xcodebuild -project DiagnoTest.xcodeproj -scheme DiagnoTest -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build | tail -n 20
+          mkdir -p Payload
+          cp -R build/device/Build/Products/Release-iphoneos/DiagnoTest.app Payload/
+          zip -qr "$GITHUB_WORKSPACE/DiagnoTest-iOS-non-signe.ipa" Payload
+          cd "$GITHUB_WORKSPACE"
+          shasum -a 256 DiagnoTest-iOS-non-signe.ipa | cut -d' ' -f1 > DiagnoTest-iOS-non-signe.ipa.sha256
+          ls -l DiagnoTest-iOS-non-signe.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DiagnoTest-ios
+          path: |
+            DiagnoTest-iOS-non-signe.ipa
+            DiagnoTest-iOS-non-signe.ipa.sha256
+
+      - name: Joindre l'.ipa à la release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            DiagnoTest-iOS-non-signe.ipa
+            DiagnoTest-iOS-non-signe.ipa.sha256

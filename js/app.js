@@ -20,9 +20,10 @@ const fmtDur = (s) => {
   return h ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`;
 };
 
-/* Pont natif de l'application Android (android/…/DiagnoBridge.java). Absent dans un navigateur :
- * chaque test garde alors son comportement web. */
-const NATIVE = window.DiagnoAndroid || null;
+/* Pont natif des applications : Android (android/…/DiagnoBridge.java, window.DiagnoAndroid) et
+ * iOS (ios/DiagnoTest/Bridge.swift, window.DiagnoNative). Absent dans un navigateur : chaque test
+ * garde alors son comportement web. Les deux ponts exposent les mêmes méthodes ; iOS en fournit moins. */
+const NATIVE = window.DiagnoNative || window.DiagnoAndroid || null;
 const nativeCall = (fn, ...args) => {
   if (!NATIVE || typeof NATIVE[fn] !== 'function') return null;
   try {
@@ -145,13 +146,14 @@ async function initSystem() {
   if (dev && !dev.error) {
     const FEATURES = { telephony: 'Téléphonie', wifi: 'Wi-Fi', bluetoothLe: 'Bluetooth LE', nfc: 'NFC', gps: 'GPS',
       fingerprint: 'Empreinte digitale', face: 'Reconnaissance faciale', flash: 'Flash', usbHost: 'USB OTG', ir: 'Infrarouge' };
-    info['Système'] = `Android ${dev.android} (API ${dev.sdk})`;
-    info['Moteur web'] = info['Navigateur'].replace('Chrome', 'WebView'); delete info['Navigateur'];
+    info['Système'] = dev.os || `Android ${dev.android} (API ${dev.sdk})`;
+    info['Moteur web'] = /^i(Pad)?OS/.test(dev.os || '') ? 'WebKit (WKWebView)' : info['Navigateur'].replace('Chrome', 'WebView');
+    delete info['Navigateur'];
     info['Modèle'] = `${dev.manufacturer.charAt(0).toUpperCase()}${dev.manufacturer.slice(1)} ${dev.model}`;
     info['Puce'] = dev.socModel ? `${dev.socManufacturer} ${dev.socModel}` : dev.hardware;
     info['Cœurs logiques'] = `${dev.cores}${dev.cpuMaxMHz ? ` (jusqu’à ${fmt(dev.cpuMaxMHz / 1000, 2)} GHz)` : ''}`;
     delete info['RAM (approx.)'];
-    info['RAM'] = `${fmtBytes(dev.ramTotal)} (${fmtBytes(dev.ramAvail)} disponibles)`;
+    info['RAM'] = `${fmtBytes(dev.ramTotal)}${dev.ramAvail ? ` (${fmtBytes(dev.ramAvail)} disponibles)` : ''}`;
     info['Stockage'] = `${fmtBytes(dev.storageFree)} libres sur ${fmtBytes(dev.storageTotal)}`;
     info['Architecture'] = dev.abis;
     info['Correctif de sécurité'] = dev.securityPatch;
@@ -191,6 +193,10 @@ async function initBattery() {
     const update = () => {
       const b = read();
       if (!b || b.error) return;
+      if (b.level < 0) { // simulateur iOS, ou appareil sans batterie
+        kv(out, { 'Statut': 'Niveau de batterie indisponible (simulateur ou appareil sans batterie).' });
+        return;
+      }
       const pct = Math.round((b.level / b.scale) * 100);
       showBatteryLevel(pct);
       let cur = b.currentNow || 0;
@@ -208,13 +214,16 @@ async function initBattery() {
         else counterUnreliable = true;
       }
       const health = fullMah && design ? Math.min(100, (fullMah / design) * 100) : null;
-      const temp = b.temperature / 10;
+      const temp = b.temperature != null ? b.temperature / 10 : null; // iOS ne fournit pas la température
       const data = {
         'Niveau': `${pct} %`,
         'État': b.charging ? `En charge ⚡${BAT_PLUG[b.plugged] ? ` (${BAT_PLUG[b.plugged]})` : ''}` : 'Sur batterie',
-        'Santé (système)': BAT_HEALTH[b.health] || 'Inconnue',
-        'Température': `${fmt(temp)} °C`,
-        'Tension': `${fmt(b.voltage / 1000, 2)} V`,
+        'Santé (système)': b.health != null ? BAT_HEALTH[b.health] || 'Inconnue' : undefined,
+        'Température': temp != null ? `${fmt(temp)} °C` : undefined,
+        'Tension': b.voltage ? `${fmt(b.voltage / 1000, 2)} V` : undefined,
+        'État thermique': b.thermalState || undefined,
+        'Économie d’énergie': b.lowPowerMode == null ? undefined : b.lowPowerMode ? 'Activée' : 'Désactivée',
+        'Santé': b.healthNote || undefined,
         'Courant': cur ? `${fmt(Math.abs(cur) / 1000, 0)} mA ${b.charging ? 'entrants' : 'consommés'}` : undefined,
         'Technologie': b.technology || undefined,
         'Cycles de charge': b.cycleCount > 0 ? b.cycleCount : undefined,
@@ -226,9 +235,9 @@ async function initBattery() {
       let status = 'ok';
       if ([4, 6].includes(b.health) || (health && health < 60)) {
         status = 'ko'; data['Diagnostic'] = 'Batterie défaillante ou très usée : remplacement conseillé.';
-      } else if ([3, 5, 7].includes(b.health) || temp >= 45 || (health && health < 80)) {
+      } else if ([3, 5, 7].includes(b.health) || temp >= 45 || b.thermalLevel >= 2 || (health && health < 80)) {
         status = 'warn';
-        data['Diagnostic'] = temp >= 45 ? 'Batterie chaude : laissez refroidir l’appareil.' : 'Usure notable : autonomie réduite.';
+        data['Diagnostic'] = temp >= 45 || b.thermalLevel >= 2 ? 'Appareil chaud : laissez-le refroidir.' : 'Usure notable : autonomie réduite.';
       } else if (pct <= 20 && !b.charging) status = 'warn';
       publish(status, data);
     };
@@ -468,6 +477,7 @@ overlay.appendChild(closeBtn);
 
 function openOverlay(hint, onKey, onTap) {
   overlay.hidden = false;
+  nativeCall('setImmersive', true);
   overlay.style.background = '#000';
   const h = $('#overlayHint');
   h.textContent = hint; h.style.opacity = 1;
@@ -492,6 +502,7 @@ function openOverlay(hint, onKey, onTap) {
 function closeOverlay() {
   if (overlay.hidden) return;
   overlay.hidden = true;
+  nativeCall('setImmersive', false);
   overlay.dataset.fs = '';
   overlayCleanup && overlayCleanup();
   overlayCleanup = null;
@@ -521,8 +532,8 @@ function initScreen() {
       'Orientation': screen.orientation?.type || '—',
       // Application Android : caractéristiques physiques exactes de la dalle
       ...(device()?.screenWidth ? {
-        'Résolution physique': `${device().screenWidth} × ${device().screenHeight} px (${device().densityDpi} dpi)`,
-        'Diagonale': `≈ ${fmt(device().screenInches)} pouces`,
+        'Résolution physique': `${device().screenWidth} × ${device().screenHeight} px${device().densityDpi ? ` (${device().densityDpi} dpi)` : ''}`,
+        'Diagonale': device().screenInches ? `≈ ${fmt(device().screenInches)} pouces` : undefined,
         'Fréquence max de la dalle': `${device().maxRefreshRate} Hz`,
         'HDR': device().hdr ? 'Oui' : 'Non',
       } : {}),

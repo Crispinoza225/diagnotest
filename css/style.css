@@ -371,5 +371,17 @@ dialog pre {
   .reveal, .te-word, .rise { opacity: 1; filter: none; transform: none; }
 }
 
-/* Dans l'application Android, les liens de téléchargement n'ont pas de sens. */
+/* Bannière d'installation sur l'écran d'accueil (Safari iOS) */
+.ios-install {
+  max-width: 1200px; margin: 18px auto 0; padding: 14px 16px; display: flex; gap: 14px; align-items: center;
+  background: var(--card); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow);
+  width: calc(100% - 32px);
+}
+.ios-install[hidden] { display: none; }
+.ios-install img { border-radius: 11px; flex: 0 0 auto; }
+.ios-install p { margin: 0; font-size: 13.5px; color: var(--muted); flex: 1; }
+.ios-install strong { color: var(--text); }
+.share-glyph { display: inline-flex; vertical-align: -2px; color: var(--accent); }
+
+/* Dans les applications Android et iOS, les liens de téléchargement n'ont pas de sens. */
 .in-app .dl-link { display: none; }
