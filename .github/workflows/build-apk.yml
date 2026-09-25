@@ -31,7 +31,9 @@ jobs:
             echo "::warning::Secrets de signature absents : l'APK sera signé avec une clé de debug."
             exit 0
           fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          # tr : tolère les fins de ligne Windows (secrets saisis depuis PowerShell)
+          printf '%s' "$KEYSTORE_B64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/release.jks"
+          KEYSTORE_PASSWORD=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d '\r\n')
           cat > "$RUNNER_TEMP/keystore.properties" <<EOF
           storeFile=$RUNNER_TEMP/release.jks
           storePassword=$KEYSTORE_PASSWORD
