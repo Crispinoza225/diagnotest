@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="DiagnoTest : testez votre ordinateur ou téléphone depuis le navigateur (batterie, CPU, RAM, écran, clavier, tactile, audio, caméra, capteurs, réseau).">
+  <meta name="description" content="DiagnoTest : testez votre ordinateur ou téléphone depuis le navigateur (batterie, CPU, RAM, écran, clavier, tactile, audio, caméra, capteurs, réseau, manettes), avec une note de santé et un certificat PDF.">
   <meta name="theme-color" content="#f8f8f7">
   <title>DiagnoTest</title>
   <link rel="icon" type="image/png" href="icons/icon-192.png">
@@ -39,14 +39,14 @@
       <h1 class="text-effect">Votre appareil, diagnostiqué en <em>quelques minutes.</em></h1>
       <p class="lead rise" style="--d:500ms">Batterie, processeur, mémoire, écran, clavier, tactile, audio, caméra, capteurs… Testez un ordinateur ou un téléphone directement dans le navigateur.</p>
       <div class="cta rise" style="--d:650ms">
-        <a href="#tests" class="btn dark lg magnetic">Commencer le diagnostic
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        <button type="button" class="btn dark lg magnetic" id="expressHero">Diagnostic express (1 min)
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
         <a href="https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.exe" class="btn lg dl-link" id="pcLink">Windows (.exe)</a>
         <a href="https://github.com/Crispinoza225/diagnotest/releases/latest/download/DiagnoTest.apk" class="btn lg dl-link" id="apkLink">Android (.apk)</a>
         <a href="https://github.com/Crispinoza225/diagnotest/blob/main/docs/GUIDE.md#iphone-et-ipad" class="btn lg dl-link" id="iosLink">iPhone</a>
       </div>
       <div class="stats rise" style="--d:800ms">
-        <div class="stat"><b data-count="14">0</b><span>tests matériels</span></div>
+        <div class="stat"><b data-count="16">0</b><span>tests matériels</span></div>
         <div class="stat"><b data-count="0">0</b><span>résultat envoyé</span></div>
         <div class="stat"><b data-count="100" data-suffix=" %">0</b><span>dans le navigateur</span></div>
       </div>
@@ -64,13 +64,44 @@
     <nav class="summary" id="summary" aria-label="Résumé des tests"></nav>
   </div>
 
+  <div class="section-head">
+    <div>
+      <span class="label">Bilan</span>
+      <h2>La santé de votre appareil, en un coup d’œil.</h2>
+    </div>
+  </div>
+
+  <section class="bilan" id="bilan" aria-live="polite">
+    <div class="bilan-note">
+      <svg class="anneau" viewBox="0 0 120 120" aria-hidden="true"><circle class="fond" cx="60" cy="60" r="52"/><circle class="valeur" id="anneau" cx="60" cy="60" r="52"/></svg>
+      <div class="bilan-chiffre"><b id="noteValeur">—</b><span>/ 100</span></div>
+    </div>
+    <div class="bilan-texte">
+      <span class="label">Note de santé</span>
+      <h2 id="noteMention">Lancez le diagnostic</h2>
+      <p class="hint" id="noteCouverture"></p>
+      <div class="row">
+        <button class="btn dark" id="expressBtn">Diagnostic express</button>
+        <button class="btn" id="certifBtn">Certificat PDF</button>
+        <button class="btn" id="histBtn">Historique</button>
+      </div>
+      <ol class="etapes" id="expressEtapes" hidden></ol>
+    </div>
+    <div class="bilan-conseils">
+      <span class="label">Recommandations</span>
+      <ul class="conseils" id="conseils"></ul>
+      <span class="label">À tester vous-même</span>
+      <div class="a-faire" id="aFaire"></div>
+    </div>
+  </section>
+
   <div class="section-head" id="tests">
     <div>
       <span class="label">Diagnostic</span>
       <h2>Lancez les tests, un par un.</h2>
     </div>
     <div class="progress-total">
-      <span class="label" id="doneCount">0 / 14 tests effectués</span>
+      <span class="label" id="doneCount">0 / 16 tests effectués</span>
       <div class="bar"><div id="doneBar"></div></div>
     </div>
   </div>
@@ -91,8 +122,10 @@
       <dl class="kv" id="batInfo"></dl>
       <div class="row">
         <button class="btn" id="batDrainBtn">Mesurer la décharge (5 min)</button>
+        <button class="btn" id="batChargeBtn">Tester le chargeur (2 min)</button>
       </div>
       <p class="out" id="batDrainOut"></p>
+      <p class="out" id="batChargeOut"></p>
     </section>
 
     <!-- CPU -->
@@ -133,6 +166,7 @@
       <div class="row wrap">
         <button class="btn primary" id="scrColorsBtn">Pixels morts (couleurs)</button>
         <button class="btn" id="scrGradBtn">Dégradés / bandes</button>
+        <button class="btn" id="scrMotionBtn">Flou de mouvement</button>
         <button class="btn" id="scrBleedBtn">Fuite de lumière</button>
         <button class="btn" id="scrFixBtn">Réparer pixel bloqué ⚠️</button>
       </div>
@@ -184,6 +218,7 @@
         <button class="btn" id="sweepBtn">Balayage 20 Hz → 20 kHz</button>
       </div>
       <p class="out" id="audioOut"></p>
+      <dl class="kv" id="audioInfo"></dl>
       <div class="verdict" data-for="audio"></div>
     </section>
 
@@ -193,6 +228,7 @@
       <div class="row">
         <button class="btn primary" id="micBtn">Démarrer le micro</button>
         <button class="btn" id="micRecBtn" disabled>Enregistrer 5 s et réécouter</button>
+        <button class="btn" id="micNoiseBtn" disabled>Bruit de fond (3 s)</button>
       </div>
       <div class="meter"><div id="micLevel"></div></div>
       <canvas id="micWave" class="chart" height="70"></canvas>
@@ -208,8 +244,11 @@
         <select id="camSelect" aria-label="Caméra"></select>
         <button class="btn primary" id="camBtn">Démarrer</button>
         <button class="btn" id="camStop">Arrêter</button>
+        <button class="btn" id="camPhotoBtn" disabled>Photo</button>
+        <button class="btn" id="camTorchBtn" hidden>Lampe torche</button>
       </div>
       <video id="camVideo" class="cam" playsinline muted autoplay></video>
+      <img id="camPhoto" class="cam-photo" alt="Photo de test" hidden>
       <p class="out" id="camOut"></p>
       <div class="verdict" data-for="camera"></div>
     </section>
@@ -256,6 +295,33 @@
       <dl class="kv" id="gpuOut"></dl>
     </section>
 
+    <!-- MANETTES -->
+    <section class="card wide" id="t-gamepad" data-test="gamepad" data-title="Manettes de jeu">
+      <h2>🎮 Manettes de jeu</h2>
+      <p class="hint">Branchez une manette (USB ou Bluetooth) et appuyez sur chaque bouton : ils deviennent verts. Les cercles montrent les joysticks.</p>
+      <div class="row">
+        <button class="btn primary" id="padDriftBtn">Mesurer la dérive des joysticks (3 s)</button>
+        <button class="btn" id="padRumbleBtn">Tester les vibrations</button>
+      </div>
+      <p class="out" id="padOut"></p>
+      <div id="padZone" class="pad-zone"></div>
+      <div class="verdict" data-for="gamepad"></div>
+    </section>
+
+    <section class="card wide" id="t-usb" data-test="usb" data-title="Ports USB">
+      <h2>🔌 Ports USB</h2>
+      <p class="hint">Branchez un appareil (clé USB, souris, chargeur…) sur le port à tester, puis lancez les tests. Recommencez pour chaque port. En cas de problème, l’assistant vous guide pas à pas jusqu’à la réparation.</p>
+      <div class="row">
+        <button class="btn primary" id="usbDetectBtn">Détecter l’appareil branché</button>
+        <button class="btn" id="usbWiggleBtn">Test de faux contact (30 s)</button>
+        <button class="btn" id="usbRepairBtn">Assistant de réparation</button>
+      </div>
+      <p class="out" id="usbOut"></p>
+      <ul id="usbListe" class="usb-liste"></ul>
+      <div id="usbRepa" class="usb-repa" hidden></div>
+      <div class="verdict" data-for="usb"></div>
+    </section>
+
   </main>
 
   <footer class="foot" id="t-desktop">
@@ -280,11 +346,55 @@
       <button class="btn primary" id="dlTxt">Télécharger .txt</button>
       <button class="btn" id="dlJson">Télécharger .json</button>
       <button class="btn" id="copyRep">Copier</button>
+      <button class="btn" id="repCertif">Certificat PDF</button>
+      <button class="btn" id="repLien">Lien de partage</button>
+      <button class="btn" id="repHist">Historique</button>
       <button class="btn ghost" id="closeRep">Fermer</button>
     </div>
   </dialog>
 
+  <!-- Historique -->
+  <dialog id="histDlg">
+    <span class="label">Historique</span><h2>Diagnostics enregistrés</h2>
+    <p class="hint">Enregistrés uniquement dans ce navigateur. Cochez deux diagnostics pour les comparer (par exemple avant et après une réparation, ou deux appareils).</p>
+    <div id="histListe" class="hist-liste"></div>
+    <div class="row">
+      <button class="btn primary" id="histComparer" disabled>Cochez deux diagnostics à comparer</button>
+      <label class="btn">Importer un rapport .json<input type="file" id="histImport" accept=".json,application/json" hidden></label>
+      <button class="btn ghost" id="histFermer">Fermer</button>
+    </div>
+  </dialog>
+
+  <!-- Comparaison -->
+  <dialog id="compDlg" class="large">
+    <span class="label">Comparaison</span><h2>Deux diagnostics côte à côte</h2>
+    <div id="compTable" class="comp-zone"></div>
+    <div class="row"><button class="btn ghost" id="compFermer">Fermer</button></div>
+  </dialog>
+
+  <!-- Lien de partage -->
+  <dialog id="partageDlg">
+    <span class="label">Partage</span><h2>Lien du rapport</h2>
+    <p class="hint" id="partageAide"></p>
+    <input class="input" id="partageLien" readonly aria-label="Lien du rapport">
+    <div class="row">
+      <button class="btn primary" id="partageCopier">Copier le lien</button>
+      <button class="btn ghost" id="partageFermer">Fermer</button>
+    </div>
+  </dialog>
+
+  <!-- Rapport reçu par lien, ou entrée de l'historique -->
+  <dialog id="recuDlg" class="large">
+    <span class="label">Rapport</span><h2 id="recuTitre">Rapport reçu</h2>
+    <div id="recuContenu"></div>
+    <div class="row">
+      <button class="btn" id="recuComparer">Comparer avec cet appareil</button>
+      <button class="btn ghost" id="recuFermer">Fermer</button>
+    </div>
+  </dialog>
+
   <script src="js/app.js"></script>
+  <script src="js/bilan.js"></script>
   <script src="js/design.js"></script>
 </body>
 </html>

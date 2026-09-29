@@ -6,6 +6,9 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/* Mode rapide (?rapide dans l'adresse) : durées raccourcies pour les tests automatiques du dépôt (tests/e2e.mjs). */
+const RAPIDE = new URLSearchParams(location.search).has('rapide');
+const duree = (ms) => (RAPIDE ? Math.min(ms, 800) : ms);
 const fmt = (n, d = 1) => Number(n).toLocaleString('fr-FR', { maximumFractionDigits: d, minimumFractionDigits: d });
 const fmtBytes = (b) => {
   if (b == null || isNaN(b)) return '—';
@@ -159,6 +162,9 @@ async function initSystem() {
     info['Correctif de sécurité'] = dev.securityPatch;
     info['Équipements'] = Object.entries(FEATURES).filter(([k]) => dev.features?.[k]).map(([, v]) => v).join(', ');
   }
+  if (navigator.bluetooth?.getAvailability) {
+    try { info['Bluetooth'] = (await navigator.bluetooth.getAvailability()) ? 'Adaptateur détecté' : 'Aucun adaptateur'; } catch { /* API refusée */ }
+  }
   kv($('#sysInfo'), info);
   setResult('system', 'info', info);
 }
@@ -264,15 +270,56 @@ async function initBattery() {
   } else {
     kv(out, { 'Statut': 'API Batterie non disponible sur ce navigateur (Firefox, Safari, iOS). Essayez Chrome/Edge, l’application Android ou la version PC.' });
     $('#batDrainBtn').disabled = true;
+    $('#batChargeBtn').disabled = true;
     setResult('battery', 'info', { note: 'API non disponible' });
     return;
   }
+
+  // Chargeur et port de charge : vitesse de charge mesurée pendant 2 minutes.
+  $('#batChargeBtn').onclick = async () => {
+    const btn = $('#batChargeBtn'), out = $('#batChargeOut');
+    if (!readState().charging) { out.textContent = 'Branchez le chargeur, puis relancez le test.'; return; }
+    btn.disabled = true;
+    const DURATION = duree(2 * 60 * 1000), start = readState().level, t0 = Date.now(), courants = [];
+    const iv = setInterval(() => {
+      const b = nativeCall('getBatteryInfo');
+      let cur = b?.currentNow || 0;
+      if (cur && Math.abs(cur) < 10000) cur *= 1000; // mA ou µA selon le constructeur
+      if (cur) courants.push(Math.abs(cur) / 1000);
+      out.textContent = `Mesure en cours… ${Math.ceil((DURATION - (Date.now() - t0)) / 1000)} s restantes (gardez le chargeur branché).`;
+    }, 1000);
+    await sleep(DURATION);
+    clearInterval(iv);
+    btn.disabled = false;
+    const gain = (readState().level - start) * 100, minutes = (Date.now() - t0) / 60000;
+    const parMinute = gain / minutes;
+    const data = {};
+    let status = results.battery?.status === 'ko' ? 'ko' : 'ok', msg;
+    if (courants.length) {
+      const moyen = courants.reduce((a, b) => a + b, 0) / courants.length;
+      data['Courant de charge'] = `${fmt(moyen, 0)} mA en moyenne`;
+      if (moyen < 500) {
+        status = status === 'ko' ? 'ko' : 'warn';
+        msg = 'Charge lente : essayez un autre câble ou chargeur, et nettoyez le port (poussière).';
+      } else msg = moyen > 1500 ? 'Charge rapide ✓' : 'Charge normale ✓';
+    } else if (gain <= 0) {
+      msg = start >= 0.8 ? 'Batterie presque pleine : la charge ralentit, refaites le test sous 80 %.' : 'Aucune progression en 2 min : chargeur, câble ou port à vérifier.';
+      if (start < 0.8) status = status === 'ko' ? 'ko' : 'warn';
+    } else {
+      msg = `${parMinute < 0.3 && start < 0.8 ? 'Charge lente' : 'Charge normale ✓'} : 0 à 100 % en ≈ ${fmtDur((100 / parMinute) * 60)}.`;
+      if (parMinute < 0.3 && start < 0.8) status = status === 'ko' ? 'ko' : 'warn';
+    }
+    if (gain > 0) data['Vitesse de charge'] = `${fmt(parMinute, 2)} %/min`;
+    data['Chargeur'] = msg;
+    out.textContent = msg;
+    setResult('battery', status, data);
+  };
 
   $('#batDrainBtn').onclick = async () => {
     const btn = $('#batDrainBtn');
     if (readState().charging) { $('#batDrainOut').textContent = 'Débranchez le chargeur pour mesurer la décharge.'; return; }
     btn.disabled = true;
-    const start = readState().level, t0 = Date.now(), DURATION = 5 * 60 * 1000;
+    const start = readState().level, t0 = Date.now(), DURATION = duree(5 * 60 * 1000);
     const timer = setInterval(() => {
       const el = Date.now() - t0;
       $('#batDrainOut').textContent = `Mesure en cours… ${Math.ceil((DURATION - el) / 1000)} s restantes (laissez l’appareil tel quel).`;
@@ -359,10 +406,10 @@ function initCPU() {
     try {
       kv(out, { 'Étape': 'Mono-cœur (3 s)…' });
       prog.style.width = '25%';
-      const [single] = await runWorkers(1, 3000);
+      const [single] = await runWorkers(1, duree(3000));
       kv(out, { 'Mono-cœur': `${fmt(single, 0)} pts`, 'Étape': `Multi-cœurs sur ${cores} threads (3 s)…` });
       prog.style.width = '60%';
-      const multiArr = await runWorkers(cores, 3000);
+      const multiArr = await runWorkers(cores, duree(3000));
       const multi = multiArr.reduce((a, b) => a + b, 0);
       prog.style.width = '100%';
       const data = {
@@ -590,6 +637,36 @@ function initScreen() {
     return true;
   });
 
+  // Flou de mouvement : des blocs défilent à trois vitesses. Sur un bon écran, leurs bords restent nets ;
+  // une traînée ou un « fantôme » derrière les blocs révèle un temps de réponse lent (ghosting).
+  $('#scrMotionBtn').onclick = () => {
+    const c = $('#touchCanvas');
+    c.hidden = false;
+    let running = true, t0 = null;
+    const ctx = c.getContext('2d');
+    const loop = (t) => {
+      if (!running) return;
+      t0 ??= t;
+      const dpr = window.devicePixelRatio || 1;
+      if (c.width !== innerWidth * dpr) { c.width = innerWidth * dpr; c.height = innerHeight * dpr; }
+      const W = c.width, H = c.height, band = H / 3, bloc = Math.min(band * 0.5, 90 * dpr);
+      ctx.fillStyle = '#3a3a3a'; ctx.fillRect(0, 0, W, H);
+      [240, 480, 960].forEach((vitesse, k) => {
+        const x = (((t - t0) / 1000) * vitesse * dpr) % (W + bloc) - bloc;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x, k * band + (band - bloc) / 2, bloc, bloc);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + bloc * 0.35, k * band + (band - bloc) / 2 + bloc * 0.35, bloc * 0.3, bloc * 0.3);
+        ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `${14 * dpr}px system-ui`;
+        ctx.fillText(`${vitesse} px/s`, 12 * dpr, k * band + 22 * dpr);
+      });
+      requestAnimationFrame(loop);
+    };
+    overlay.addEventListener('closed', () => { running = false; }, { once: true });
+    openOverlay('Les blocs doivent rester nets, sans traînée derrière eux. Échap ou « Quitter » pour arrêter.');
+    requestAnimationFrame(loop);
+  };
+
   $('#scrBleedBtn').onclick = () => {
     openOverlay('Écran noir : baissez la lumière de la pièce et cherchez des halos clairs sur les bords (fuite de lumière).', null, () => closeOverlay());
   };
@@ -807,6 +884,17 @@ function initAudio() {
     $('#audioOut').textContent = `Bip 440 Hz — ${b.textContent.trim()}. L’entendez-vous du bon côté ?`;
   }));
 
+  // Sorties audio : haut-parleurs internes, casque, Bluetooth, HDMI… (noms visibles après l'accès au micro).
+  const sorties = async () => {
+    const devs = (await navigator.mediaDevices?.enumerateDevices?.().catch(() => [])) || [];
+    const outs = devs.filter((d) => d.kind === 'audiooutput');
+    if (!outs.length) return;
+    const noms = outs.map((d) => d.label).filter(Boolean);
+    kv($('#audioInfo'), { 'Sorties audio': noms.length ? noms.join(' · ') : `${outs.length} (noms masqués tant que le micro n’a pas été autorisé)` });
+  };
+  sorties();
+  navigator.mediaDevices?.addEventListener?.('devicechange', sorties);
+
   $('#sweepBtn').onclick = () => {
     const ctx = getAudio();
     const osc = ctx.createOscillator(), gain = ctx.createGain();
@@ -829,9 +917,9 @@ function initAudio() {
 /* Microphone                                                          */
 /* ------------------------------------------------------------------ */
 function initMic() {
-  let stream = null, peak = 0;
+  let stream = null, peak = 0, dernierDb = -Infinity;
   $('#micBtn').onclick = async () => {
-    if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; $('#micBtn').textContent = 'Démarrer le micro'; $('#micRecBtn').disabled = true; return; }
+    if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; $('#micBtn').textContent = 'Démarrer le micro'; $('#micRecBtn').disabled = true; $('#micNoiseBtn').disabled = true; return; }
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     } catch (e) {
@@ -841,6 +929,7 @@ function initMic() {
     }
     $('#micBtn').textContent = 'Arrêter le micro';
     $('#micRecBtn').disabled = !window.MediaRecorder;
+    $('#micNoiseBtn').disabled = false;
     const track = stream.getAudioTracks()[0];
     $('#micOut').textContent = `Micro : ${track.label || 'par défaut'} — parlez ou tapez des mains.`;
     const ctx = getAudio();
@@ -854,6 +943,7 @@ function initMic() {
       an.getFloatTimeDomainData(buf);
       let sum = 0; for (const v of buf) sum += v * v;
       const rms = Math.sqrt(sum / buf.length);
+      dernierDb = rms > 0 ? 20 * Math.log10(rms) : -Infinity; // niveau en dB « pleine échelle » (0 = saturation)
       $('#micLevel').style.width = `${Math.min(100, rms * 400)}%`;
       if (rms > peak) peak = rms;
       if (peak > 0.02 && results.mic?.status !== 'ok' && results.mic?.status !== 'ko') setResult('mic', 'ok', { 'Micro': track.label || 'par défaut', 'Signal': 'Détecté ✓' });
@@ -867,6 +957,26 @@ function initMic() {
     };
     draw();
   };
+  // Bruit de fond : niveau moyen du micro pendant 3 s de silence. Un souffle fort trahit un micro abîmé.
+  $('#micNoiseBtn').onclick = async () => {
+    if (!stream) return;
+    const btn = $('#micNoiseBtn');
+    btn.disabled = true;
+    const mesures = [];
+    for (let i = 0; i < 30; i++) {
+      $('#micOut').textContent = `Silence, s'il vous plaît… ${Math.ceil((30 - i) / 10)} s`;
+      if (isFinite(dernierDb)) mesures.push(dernierDb);
+      await sleep(100);
+    }
+    btn.disabled = false;
+    if (!mesures.length) { $('#micOut').textContent = 'Aucun signal reçu du micro.'; return; }
+    mesures.sort((a, b) => a - b);
+    const bruit = mesures[Math.floor(mesures.length / 2)];
+    const avis = bruit < -60 ? 'très calme ✓' : bruit < -45 ? 'normal ✓' : bruit < -30 ? 'élevé : pièce bruyante, ou souffle du micro' : 'très élevé : micro défectueux probable si la pièce est calme';
+    $('#micOut').textContent = `Bruit de fond : ${fmt(bruit, 0)} dBFS (${avis}).`;
+    setResult('mic', bruit >= -30 && results.mic?.status !== 'ko' ? 'warn' : results.mic?.status || 'ok', { 'Bruit de fond': `${fmt(bruit, 0)} dBFS (${avis})` });
+  };
+
   $('#micRecBtn').onclick = async () => {
     if (!stream) return;
     const rec = new MediaRecorder(stream), parts = [];
@@ -900,7 +1010,42 @@ function initCamera() {
     return cams.length;
   };
   listCams();
-  const stop = () => { stream?.getTracks().forEach((t) => t.stop()); stream = null; $('#camVideo').srcObject = null; };
+  const stop = () => {
+    stream?.getTracks().forEach((t) => t.stop()); stream = null; $('#camVideo').srcObject = null;
+    $('#camPhotoBtn').disabled = true; $('#camTorchBtn').hidden = true;
+  };
+  // Photo en pleine résolution : ImageCapture quand il existe (capteur complet), sinon une image du flux vidéo.
+  $('#camPhotoBtn').onclick = async () => {
+    if (!stream) return;
+    const piste = stream.getVideoTracks()[0];
+    let blob;
+    try {
+      if (window.ImageCapture) blob = await new ImageCapture(piste).takePhoto();
+    } catch { /* repli sur la vidéo */ }
+    if (!blob) {
+      const v = $('#camVideo'), cv = document.createElement('canvas');
+      cv.width = v.videoWidth; cv.height = v.videoHeight;
+      cv.getContext('2d').drawImage(v, 0, 0);
+      blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.92));
+    }
+    const img = $('#camPhoto');
+    img.onload = () => {
+      $('#camOut').textContent = `Photo : ${img.naturalWidth} × ${img.naturalHeight} px (${fmt((img.naturalWidth * img.naturalHeight) / 1e6)} Mpx). Vérifiez la netteté et l'absence de taches.`;
+      setResult('camera', results.camera?.status === 'ko' ? 'ko' : 'ok', { 'Photo': `${img.naturalWidth} × ${img.naturalHeight} px` });
+    };
+    img.src = URL.createObjectURL(blob);
+    img.hidden = false;
+  };
+  let torche = false;
+  $('#camTorchBtn').onclick = async () => {
+    if (!stream) return;
+    torche = !torche;
+    try {
+      await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: torche }] });
+      $('#camTorchBtn').textContent = torche ? 'Éteindre la lampe' : 'Lampe torche';
+      setResult('camera', results.camera?.status || 'ok', { 'Lampe torche (flash)': 'Commande envoyée : s’est-elle allumée ?' });
+    } catch (e) { $('#camOut').textContent = `Lampe torche indisponible : ${e.message}`; }
+  };
   $('#camStop').onclick = stop;
   $('#camBtn').onclick = async () => {
     stop();
@@ -915,6 +1060,10 @@ function initCamera() {
     }
     const v = $('#camVideo');
     v.srcObject = stream;
+    const piste = stream.getVideoTracks()[0];
+    const caps = piste.getCapabilities?.() || {};
+    $('#camPhotoBtn').disabled = false;
+    $('#camTorchBtn').hidden = !caps.torch;
     const n = await listCams();
     const s = stream.getVideoTracks()[0].getSettings();
     const data = { 'Caméra': stream.getVideoTracks()[0].label, 'Résolution max obtenue': `${s.width} × ${s.height}`, 'Images/s': s.frameRate ? fmt(s.frameRate, 0) : '—', 'Caméras détectées': n };
@@ -954,6 +1103,21 @@ function initSensors() {
       $('#bubble').style.transform = `translate(${x}px, ${y}px)`;
       render();
     });
+    // Boussole : cap magnétique (iOS : webkitCompassHeading ; Android : orientation absolue).
+    const cap = (deg) => {
+      const pts = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+      state['Boussole'] = `${fmt(deg, 0)}° (${pts[Math.round(deg / 45) % 8]})`;
+      render();
+    };
+    window.addEventListener('deviceorientationabsolute', (e) => { if (e.alpha != null) cap((360 - e.alpha) % 360); });
+    window.addEventListener('deviceorientation', (e) => { if (e.webkitCompassHeading != null) cap(e.webkitCompassHeading); });
+    if ('AmbientLightSensor' in window) {
+      try {
+        const lum = new AmbientLightSensor();
+        lum.addEventListener('reading', () => { state['Luminosité ambiante'] = `${fmt(lum.illuminance, 0)} lux`; render(); });
+        lum.start();
+      } catch { /* capteur non autorisé */ }
+    }
     window.addEventListener('devicemotion', (e) => {
       const a = e.accelerationIncludingGravity;
       if (!a || a.x == null) return;
@@ -1014,26 +1178,35 @@ function initNetwork() {
     const DL_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
     try {
       kv(out, { ...base(), 'Latence': 'Mesure…' });
+      // 12 requêtes : latence, gigue et pertes (requête sans réponse en 3 s). La 1re, avec DNS + TLS, est écartée.
       const pings = [];
-      for (let i = 0; i < 6; i++) {
-        const t = performance.now();
-        await fetch(`${PING_URL}?r=${Math.random()}`, { cache: 'no-store' });
-        pings.push(performance.now() - t);
+      let perdues = 0;
+      for (let i = 0; i < 12; i++) {
+        const t = performance.now(), ctrl = new AbortController(), minuteur = setTimeout(() => ctrl.abort(), 3000);
+        try {
+          await fetch(`${PING_URL}?r=${Math.random()}`, { cache: 'no-store', signal: ctrl.signal });
+          if (i) pings.push(performance.now() - t);
+        } catch (e) {
+          if (i === 0 && e.name !== 'AbortError') throw e; // aucune connexion : inutile de continuer
+          if (i) perdues++;
+        } finally { clearTimeout(minuteur); }
       }
-      pings.shift(); // la 1re requête inclut DNS + TLS
+      if (!pings.length) throw new Error('aucune réponse du serveur de test');
       pings.sort((a, b) => a - b);
       const lat = pings[Math.floor(pings.length / 2)];
       const jitter = pings.at(-1) - pings[0];
-      kv(out, { ...base(), 'Latence': `${fmt(lat, 0)} ms`, 'Gigue': `${fmt(jitter, 0)} ms`, 'Débit descendant': 'Mesure…' });
+      const pertes = (perdues / 11) * 100;
+      kv(out, { ...base(), 'Latence': `${fmt(lat, 0)} ms`, 'Gigue': `${fmt(jitter, 0)} ms`, 'Pertes': `${fmt(pertes, 0)} %`, 'Débit descendant': 'Mesure…' });
       let bytes = 0; const t0 = performance.now();
       for (let i = 0; i < 3; i++) {
         const r = await fetch(`${DL_URL}?r=${Math.random()}`, { cache: 'no-store' });
         bytes += (await r.arrayBuffer()).byteLength;
       }
       const mbps = (bytes * 8) / ((performance.now() - t0) / 1000) / 1e6;
-      const data = { ...base(), 'Latence': `${fmt(lat, 0)} ms`, 'Gigue': `${fmt(jitter, 0)} ms`, 'Débit descendant': `${fmt(mbps)} Mbit/s (fichiers de ${fmtBytes(bytes / 3)})` };
+      const data = { ...base(), 'Latence': `${fmt(lat, 0)} ms`, 'Gigue': `${fmt(jitter, 0)} ms`, 'Pertes': `${fmt(pertes, 0)} %`,
+        'Débit descendant': `${fmt(mbps)} Mbit/s (fichiers de ${fmtBytes(bytes / 3)})` };
       kv(out, data);
-      setResult('network', lat > 150 || mbps < 5 ? 'warn' : 'ok', data);
+      setResult('network', lat > 150 || mbps < 5 || pertes > 0 ? 'warn' : 'ok', data);
     } catch (e) {
       kv(out, { ...base(), 'Erreur': `Test impossible : ${e.message}` });
       setResult('network', 'ko', { erreur: e.message });
@@ -1139,10 +1312,10 @@ function initGPU() {
       frames++;
       const dt = now - last; last = now;
       if (now - t0 > 1000 && dt > 0) minFps = Math.min(minFps, 1000 / dt);
-      if (now - t0 < 10000) { requestAnimationFrame(frame); return; }
+      if (now - t0 < duree(10000)) { requestAnimationFrame(frame); return; }
       const fps = frames / ((now - t0) / 1000);
       const mpix = (c.width * c.height * 4 * fps) / 1e6;
-      const data = { 'GPU': info.renderer, 'Images/s moyennes': fmt(fps), 'Images/s minimum': fmt(minFps), 'Score': `${fmt(mpix, 0)} Mpix/s`, 'Résolution de rendu': `${c.width} × ${c.height}` };
+      const data = { 'GPU': info.renderer, 'Images/s moyennes': fmt(fps), 'Images/s minimum': isFinite(minFps) ? fmt(minFps) : '—', 'Score': `${fmt(mpix, 0)} Mpix/s`, 'Résolution de rendu': `${c.width} × ${c.height}` };
       kv($('#gpuOut'), data);
       setResult('gpu', 'ok', data);
       btn.disabled = false;
@@ -1152,10 +1325,91 @@ function initGPU() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Manettes de jeu (Gamepad API)                                       */
+/* ------------------------------------------------------------------ */
+const NOMS_BOUTONS = ['A / ✕', 'B / ○', 'X / □', 'Y / △', 'LB / L1', 'RB / R1', 'LT / L2', 'RT / R2', 'Select', 'Start',
+  'Stick G.', 'Stick D.', '↑', '↓', '←', '→', 'Accueil', 'Pavé'];
+
+function initGamepad() {
+  const zone = $('#padZone'), out = $('#padOut');
+  const testes = new Map(); // index de la manette → ensemble des boutons déjà pressés
+  let boucle = false;
+  const manettes = () => Array.from(navigator.getGamepads?.() || []).filter(Boolean);
+
+  const dessiner = () => {
+    const pads = manettes();
+    if (!pads.length) {
+      zone.innerHTML = '<p class="small">Aucune manette détectée. Branchez-la (USB ou Bluetooth), puis appuyez sur un bouton.</p>';
+      boucle = false;
+      return;
+    }
+    zone.innerHTML = pads.map((pad) => {
+      const vus = testes.get(pad.index) || new Set();
+      pad.buttons.forEach((b, i) => { if (b.pressed) vus.add(i); });
+      testes.set(pad.index, vus);
+      const boutons = pad.buttons.map((b, i) => `<span class="${b.pressed ? 'down ' : ''}${vus.has(i) ? 'hit' : ''}">${NOMS_BOUTONS[i] || `B${i}`}${b.value > 0 && b.value < 1 ? ` ${Math.round(b.value * 100)} %` : ''}</span>`).join('');
+      const axes = [];
+      for (let a = 0; a + 1 < pad.axes.length; a += 2) {
+        const [x, y] = [pad.axes[a], pad.axes[a + 1]];
+        axes.push(`<div class="stick" title="Axes ${a} et ${a + 1}"><i style="transform:translate(${x * 26}px,${y * 26}px)"></i></div>`);
+      }
+      return `<div class="pad"><b>${pad.id.replace(/\(.*?\)/g, '').trim() || 'Manette'}</b>
+        <div class="mbtns">${boutons}</div><div class="sticks">${axes.join('')}</div>
+        <p class="small">${vus.size} / ${pad.buttons.length} boutons testés</p></div>`;
+    }).join('');
+    const total = pads.reduce((n, p) => n + p.buttons.length, 0), faits = pads.reduce((n, p) => n + (testes.get(p.index)?.size || 0), 0);
+    if (faits && faits === total && results.gamepad?.status !== 'ko' && results.gamepad?.data?.['Boutons'] !== 'Tous fonctionnent') {
+      setResult('gamepad', results.gamepad?.status === 'warn' ? 'warn' : 'ok', { 'Boutons': 'Tous fonctionnent' });
+    }
+    if (boucle) requestAnimationFrame(dessiner);
+  };
+  const demarrer = () => { if (!boucle) { boucle = true; requestAnimationFrame(dessiner); } };
+  addEventListener('gamepadconnected', (e) => {
+    setResult('gamepad', results.gamepad?.status || 'info', { 'Manette': e.gamepad.id, 'Boutons / axes': `${e.gamepad.buttons.length} / ${e.gamepad.axes.length}` });
+    demarrer();
+  });
+  addEventListener('gamepaddisconnected', () => dessiner());
+  dessiner();
+
+  // Dérive (« drift ») : au repos, un joystick en bon état revient à 0. Au-delà de 0,1, il dérive.
+  $('#padDriftBtn').onclick = async () => {
+    const pads = manettes();
+    if (!pads.length) { out.textContent = 'Branchez une manette et appuyez sur un bouton pour qu’elle soit détectée.'; return; }
+    const btn = $('#padDriftBtn');
+    btn.disabled = true;
+    const max = {};
+    const t0 = performance.now();
+    while (performance.now() - t0 < duree(3000)) {
+      out.textContent = 'Ne touchez pas les joysticks…';
+      manettes().forEach((pad) => pad.axes.forEach((v, i) => { max[`${pad.index}:${i}`] = Math.max(max[`${pad.index}:${i}`] || 0, Math.abs(v)); }));
+      await sleep(50);
+    }
+    btn.disabled = false;
+    const pire = Math.max(0, ...Object.values(max));
+    const derive = Object.entries(max).filter(([, v]) => v > 0.1).map(([k]) => `axe ${k.split(':')[1]}`);
+    const msg = derive.length ? `Dérive détectée (${derive.join(', ')}, jusqu’à ${fmt(pire * 100, 0)} %) : le joystick bouge tout seul.` : `Aucune dérive (écart max ${fmt(pire * 100, 0)} %) ✓`;
+    out.textContent = msg;
+    setResult('gamepad', derive.length ? 'warn' : results.gamepad?.status === 'ko' ? 'ko' : 'ok', { 'Dérive des joysticks': msg });
+  };
+
+  $('#padRumbleBtn').onclick = async () => {
+    const pad = manettes().find((p) => p.vibrationActuator);
+    if (!pad) { out.textContent = 'Aucune manette avec vibrations détectée.'; return; }
+    try {
+      await pad.vibrationActuator.playEffect('dual-rumble', { duration: 800, strongMagnitude: 1, weakMagnitude: 1 });
+      out.textContent = 'Vibration envoyée : la manette a-t-elle vibré ?';
+    } catch (e) { out.textContent = `Vibration impossible : ${e.message}`; }
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Rapport                                                             */
 /* ------------------------------------------------------------------ */
 function buildReport() {
-  const lines = ['RAPPORT DIAGNOTEST', `Date : ${new Date().toLocaleString('fr-FR')}`, `Navigateur : ${navigator.userAgent}`, ''];
+  const lines = ['RAPPORT DIAGNOTEST', `Date : ${new Date().toLocaleString('fr-FR')}`, `Navigateur : ${navigator.userAgent}`];
+  const note = typeof calculerNote === 'function' ? calculerNote() : null; // js/bilan.js
+  if (note?.note != null) lines.push(`Note de santé : ${note.note}/100 (${note.mention}) — ${note.evalues} tests évalués sur ${note.total}`);
+  lines.push('');
   $$('.card[data-test]').forEach((card) => {
     const r = results[card.dataset.test];
     lines.push(`■ ${card.dataset.title.toUpperCase()} — ${r ? STATUS_LABEL[r.status] : 'Non testé'}`);
@@ -1164,6 +1418,8 @@ function buildReport() {
   });
   const counts = Object.values(results).reduce((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {});
   lines.push(`Bilan : ${counts.ok || 0} OK · ${counts.warn || 0} à surveiller · ${counts.ko || 0} défaut(s)`);
+  const conseils = typeof recommandations === 'function' ? recommandations() : [];
+  if (conseils.length) lines.push('', 'RECOMMANDATIONS', ...conseils.map((c) => `  ${c.niveau === 'ko' ? '✖' : '⚠'} ${c.texte}`));
   return lines.join('\n');
 }
 function download(name, content, type) {
@@ -1179,13 +1435,174 @@ function initReport() {
   $('#closeRep').onclick = () => dlg.close();
   const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   $('#dlTxt').onclick = () => download(`diagnotest-${stamp()}.txt`, buildReport(), 'text/plain');
-  $('#dlJson').onclick = () => download(`diagnotest-${stamp()}.json`, JSON.stringify({ date: new Date().toISOString(), userAgent: navigator.userAgent, results }, null, 2), 'application/json');
+  // Le .json contient l'instantané du bilan (réimportable dans l'historique) et les résultats bruts.
+  $('#dlJson').onclick = () => download(`diagnotest-${stamp()}.json`, JSON.stringify({
+    ...(typeof instantane === 'function' ? instantane() : { date: new Date().toISOString() }), userAgent: navigator.userAgent, results,
+  }, null, 2), 'application/json');
   $('#copyRep').onclick = async () => { try { await navigator.clipboard.writeText(buildReport()); $('#copyRep').textContent = 'Copié ✓'; } catch { $('#copyRep').textContent = 'Échec'; } };
   if (NATIVE?.shareText) {
     const share = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Partager' });
     share.onclick = () => nativeCall('shareText', 'Rapport DiagnoTest', buildReport());
     $('#copyRep').after(share);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Ports USB : détection, faux contact, assistant de réparation        */
+/* ------------------------------------------------------------------ */
+// Les noms d'appareils viennent du matériel : ils sont toujours insérés avec textContent.
+const ETAPES_USB_COMMUNES = {
+  debut: [
+    ['Changer de câble et d’appareil', 'Branchez un autre câble et un autre appareil sur ce port, puis cet appareil sur un autre port. Si tout marche avec l’autre câble, c’est le câble qui est usé : le port n’y est pour rien.'],
+    ['Nettoyer le port', 'Appareil éteint, éclairez l’intérieur du port. Retirez poussière et peluches avec un cure-dent en bois ou une bombe d’air sec, jamais avec une aiguille ou un trombone (risque de court-circuit). Sur un téléphone, la poussière de poche empêche souvent la prise de s’enfoncer jusqu’au bout.'],
+    ['Redémarrer complètement', 'Éteignez l’appareil (pas une simple mise en veille), attendez 30 secondes et rallumez-le : le contrôleur USB est réinitialisé.'],
+  ],
+  fin: [
+    ['Inspecter le connecteur', 'Regardez le port à la lampe : languettes tordues, cassées, noircies ou verdâtres (oxydation), ou prise qui bouge beaucoup quand le câble est branché ? Le connecteur est alors abîmé.'],
+    ['Réparation matérielle', 'Le port est défaillant. Sur un téléphone, le connecteur de charge se remplace chez un réparateur (il est souvent sur une petite carte vissée, réparation courante et peu chère). Sur un ordinateur, le port est généralement soudé à la carte mère : en attendant, un hub USB ou une station d’accueil sur un port qui marche dépanne.'],
+  ],
+};
+const ETAPES_USB_OS = {
+  Windows: [
+    ['Réparation automatique', 'Téléchargez DiagnoTest.exe (lien en bas de page) et lancez dans un terminal administrateur : DiagnoTest.exe --reparer-usb. Il désactive la suspension sélective USB, relance la détection du matériel et redémarre les appareils USB en erreur.'],
+    ['Gestionnaire de périphériques', 'Clic droit sur Démarrer → Gestionnaire de périphériques → Contrôleurs de bus USB. Un triangle jaune signale une erreur : clic droit → Désinstaller l’appareil, puis menu Action → Rechercher les modifications sur le matériel. Faites de même pour chaque « Concentrateur USB racine », puis redémarrez.'],
+    ['Pilotes', 'Installez les pilotes du chipset et de l’USB depuis le site du fabricant du PC, et les mises à jour de Windows Update → Options avancées → Mises à jour facultatives.'],
+  ],
+  Android: [
+    ['Mode USB', 'Câble branché à un ordinateur, déroulez les notifications et touchez « Recharge via USB » : choisissez « Transfert de fichiers ». Pour une clé ou une souris, il faut un adaptateur OTG ; certains téléphones demandent d’activer OTG dans les paramètres.'],
+    ['Mode sans échec', 'Appui long sur « Éteindre » dans le menu d’arrêt pour redémarrer en mode sans échec. Si le port marche alors, une application perturbe l’USB : désinstallez les dernières installées.'],
+  ],
+  iOS: [
+    ['Autoriser les accessoires', 'Déverrouillez l’iPhone avant de brancher, et touchez « Se fier » si un ordinateur le demande. Réglages → Face ID et code : activez « Accessoires USB » si l’iPhone reste verrouillé longtemps.'],
+    ['Câble certifié', 'Utilisez un câble d’origine ou certifié MFi : les autres provoquent le message « Cet accessoire n’est peut-être pas pris en charge ».'],
+  ],
+  macOS: [
+    ['Rapport système', 'Menu Pomme → À propos de ce Mac → Plus d’infos → Rapport système → USB. Si l’appareil n’y figure pas, le port ou le câble n’est pas reconnu.'],
+    ['Réinitialiser le SMC', 'Mac Intel : réinitialisez le SMC (procédure Apple propre à votre modèle). Mac Apple Silicon : éteignez-le 30 secondes, cela suffit.'],
+  ],
+  Linux: [
+    ['Réparation automatique', 'sudo python3 diagnotest.py --reparer-usb désactive la mise en veille automatique des ports USB. Pour voir les erreurs, lancez sudo dmesg -w et branchez l’appareil.'],
+  ],
+};
+
+function etapesUSB(os) {
+  const cle = /^(iOS|iPadOS)/.test(os) ? 'iOS' : Object.keys(ETAPES_USB_OS).find((k) => os.startsWith(k));
+  return [...ETAPES_USB_COMMUNES.debut, ...(ETAPES_USB_OS[cle] || []), ...ETAPES_USB_COMMUNES.fin];
+}
+
+function initUSB() {
+  const out = $('#usbOut'), liste = $('#usbListe'), repa = $('#usbRepa');
+  const nomUSB = (d) => [d.manufacturerName, d.productName].filter(Boolean).join(' ') || d.productName
+    || `Appareil ${d.vendorId.toString(16).padStart(4, '0')}:${d.productId.toString(16).padStart(4, '0')}`;
+
+  const afficher = (appareils) => {
+    liste.replaceChildren(...appareils.map((d) => {
+      const li = document.createElement('li');
+      const b = document.createElement('b');
+      b.textContent = d.nom;
+      li.append(b, document.createTextNode(d.detail ? ` — ${d.detail}` : ''));
+      return li;
+    }));
+  };
+
+  $('#usbDetectBtn').onclick = async () => {
+    const api = navigator.usb ? 'usb' : navigator.hid ? 'hid' : null;
+    if (!api) {
+      out.textContent = 'Ce navigateur ne peut pas lister les appareils USB (Chrome ou Edge le peuvent, sur ordinateur et Android). Utilisez le test de faux contact avec un chargeur, ou DiagnoTest.exe sur PC.';
+      setResult('usb', 'info', { 'Détection': 'Non prise en charge par ce navigateur' });
+      return;
+    }
+    out.textContent = 'Choisissez dans la liste l’appareil branché sur le port à tester.';
+    try {
+      if (api === 'usb') await navigator.usb.requestDevice({ filters: [] });
+      else await navigator.hid.requestDevice({ filters: [] });
+    } catch (e) {
+      if (e.name === 'NotFoundError') {
+        out.textContent = 'Aucun appareil choisi. S’il n’apparaissait pas dans la liste alors qu’il est branché, le port, le câble ou l’appareil n’est pas reconnu : essayez un autre câble, puis l’assistant de réparation.';
+        return;
+      }
+      out.textContent = `Détection impossible : ${e.message}`;
+      return;
+    }
+    const appareils = api === 'usb'
+      ? (await navigator.usb.getDevices()).map((d) => ({ nom: nomUSB(d), detail: `USB ${d.usbVersionMajor}.${d.usbVersionMinor}` }))
+      : (await navigator.hid.getDevices()).map((d) => ({ nom: d.productName || 'Périphérique HID', detail: 'clavier, souris ou manette' }));
+    afficher(appareils);
+    out.textContent = `${appareils.length} appareil(s) reconnu(s). Le port fonctionne s’il y figure. Recommencez sur chaque port.`;
+    const dernier = appareils[appareils.length - 1];
+    setResult('usb', 'ok', { 'Appareil détecté': dernier?.nom, 'Norme': dernier?.detail });
+  };
+
+  // Faux contact : on suit l'état de charge (et les débranchements USB) pendant que l'utilisateur remue le câble.
+  $('#usbWiggleBtn').onclick = async () => {
+    const btn = $('#usbWiggleBtn');
+    let lireCharge = null, batterie = null;
+    if (nativeCall('getBatteryInfo')?.charging !== undefined) lireCharge = () => !!nativeCall('getBatteryInfo')?.charging;
+    else if (navigator.getBattery) {
+      try { batterie = await navigator.getBattery(); lireCharge = () => batterie.charging; } catch { /* API refusée */ }
+    }
+    const suivis = navigator.usb ? await navigator.usb.getDevices().catch(() => []) : [];
+    if (!lireCharge && !suivis.length) {
+      out.textContent = 'Ce navigateur ne signale ni la charge ni les appareils USB : faites le test à l’œil, en regardant si le voyant de charge clignote quand vous remuez le câble.';
+      return;
+    }
+    if (lireCharge && !lireCharge() && !suivis.length) {
+      out.textContent = 'Branchez d’abord le chargeur sur ce port (le voyant de charge doit s’allumer), puis relancez le test.';
+      return;
+    }
+    let coupures = 0, etat = lireCharge ? lireCharge() : true;
+    const onDeco = () => { coupures++; };
+    navigator.usb?.addEventListener('disconnect', onDeco);
+    const total = duree(30000), debut = performance.now();
+    btn.disabled = true;
+    while (performance.now() - debut < total) {
+      if (lireCharge) {
+        const maintenant = lireCharge();
+        if (etat && !maintenant) coupures++;
+        etat = maintenant;
+      }
+      const reste = Math.ceil((total - (performance.now() - debut)) / 1000);
+      out.textContent = `Remuez doucement la prise dans tous les sens, sans la débrancher… ${reste} s — coupures : ${coupures}`;
+      await sleep(200);
+    }
+    navigator.usb?.removeEventListener('disconnect', onDeco);
+    btn.disabled = false;
+    if (coupures) {
+      out.textContent = `${coupures} coupure(s) : faux contact. Le port est sale ou abîmé, ou le câble est usé. Suivez l’assistant de réparation.`;
+      setResult('usb', 'ko', { 'Faux contact': `${coupures} coupure(s) en ${Math.round(total / 1000)} s` });
+      ouvrirAssistant();
+    } else {
+      out.textContent = 'Aucune coupure : la connexion est stable.';
+      setResult('usb', 'ok', { 'Faux contact': `Aucune coupure en ${Math.round(total / 1000)} s` });
+    }
+  };
+
+  const ouvrirAssistant = () => {
+    const etapes = etapesUSB(detectOS(navigator.userAgent));
+    let i = 0;
+    const montrer = () => {
+      const [titre, texte] = etapes[i];
+      const derniere = i === etapes.length - 1;
+      repa.hidden = false;
+      repa.innerHTML = `<span class="label">Étape ${i + 1} / ${etapes.length}</span><h3></h3><p></p><div class="row">
+        <button class="btn primary" data-r="ok">✓ C’est réglé</button>
+        <button class="btn" data-r="suite">${derniere ? '✗ Toujours en panne' : 'Toujours en panne → étape suivante'}</button></div>`;
+      repa.querySelector('h3').textContent = titre;
+      repa.querySelector('p').textContent = texte;
+      repa.querySelector('[data-r=ok]').onclick = () => {
+        repa.innerHTML = '<p class="usb-fini">Port réparé ✓ Relancez le test de faux contact pour confirmer.</p>';
+        setResult('usb', 'ok', { 'Réparation': `Réglé à l’étape « ${titre} »` });
+      };
+      repa.querySelector('[data-r=suite]').onclick = () => {
+        if (!derniere) { i++; montrer(); return; }
+        repa.innerHTML = '<p class="usb-fini">Toutes les solutions ont été essayées : le port doit être réparé ou remplacé.</p>';
+        setResult('usb', 'ko', { 'Réparation': 'Port toujours en panne : réparation matérielle nécessaire' });
+      };
+    };
+    montrer();
+    repa.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+  $('#usbRepairBtn').onclick = ouvrirAssistant;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1220,5 +1637,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initNetwork();
   initStorage();
   initGPU();
+  initGamepad();
+  initUSB();
   initReport();
 });

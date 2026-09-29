@@ -27,6 +27,8 @@
     network: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>',
     storage: '<path d="M22 12H2M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/><path d="M6 16h.01M10 16h.01"/>',
     gpu: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="8.5" cy="12" r="2.5"/><circle cx="15.5" cy="12" r="2.5"/>',
+    usb: '<path d="M12 3v13"/><path d="M9.5 5.5 12 3l2.5 2.5"/><circle cx="12" cy="18.5" r="2.5"/><path d="M12 13 7.5 10.5V8"/><circle cx="7.5" cy="7" r="1"/><path d="M12 11l4.5-2.5V6.5"/><path d="M15.5 5h2v2h-2z"/>',
+    gamepad: '<path d="M6 11h4M8 9v4M15 12h.01M18 10h.01"/><path d="M17.3 5H6.7a4 4 0 0 0-4 3.6L2 15.4A3 3 0 0 0 5 19c1 0 1.5-.5 2-1l1.4-1.4A2 2 0 0 1 9.8 16h4.4a2 2 0 0 1 1.4.6L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3.6l-.7-6.8A4 4 0 0 0 17.3 5z"/>',
   };
   const svgIcon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
   const STATUS_TXT = { ok: 'OK', ko: 'Défaut', warn: 'À surveiller', info: 'Info' };
