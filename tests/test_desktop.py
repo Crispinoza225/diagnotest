@@ -1,4 +1,4 @@
-"""Tests de la note de santé et du rapport HTML de la version PC : python -m unittest discover -s tests"""
+"""Tests de la note de santé, du rapport HTML et de l'analyse USB de la version PC : python -m unittest discover -s tests"""
 import importlib.util
 import os
 import unittest
@@ -47,6 +47,39 @@ class TestNote(unittest.TestCase):
         self.assertIn("Rapport de diagnostic", html)
         self.assertNotIn("<script>alert", html)
         self.assertIn("&lt;script&gt;", html)
+
+
+class TestUSB(unittest.TestCase):
+    def test_pnp_liste(self):
+        texte = ('[{"FriendlyName":"Souris USB","Status":"OK","Problem":0,"InstanceId":"USB\\\\VID_046D"},'
+                 '{"FriendlyName":null,"Status":"Error","Problem":43,"InstanceId":"USB\\\\VID_0000"}]')
+        appareils = dt.parse_pnp(texte)
+        self.assertEqual([a["nom"] for a in appareils], ["Souris USB", "USB\\VID_0000"])
+        self.assertEqual([dt.en_erreur(a) for a in appareils], [False, True])
+        self.assertIn("code 43", dt.PROBLEMES_WIN[appareils[1]["probleme"]])
+
+    def test_pnp_objet_seul_et_enum(self):
+        appareils = dt.parse_pnp('{"FriendlyName":"Clé","Status":"OK","Problem":"CM_PROB_NONE","InstanceId":"USB\\\\X"}')
+        self.assertEqual(len(appareils), 1)
+        self.assertFalse(dt.en_erreur(appareils[0]))
+        self.assertEqual(dt.parse_pnp('{"Status":"Error","Problem":"CM_PROB_FAILED_POST_START (43)"}')[0]["probleme"], 43)
+
+    def test_pnp_vide_ou_invalide(self):
+        self.assertEqual(dt.parse_pnp(""), [])
+        self.assertEqual(dt.parse_pnp("pas du json"), [])
+
+    def test_dmesg(self):
+        journal = ("[1.0] usb 1-1: new high-speed USB device number 2 using xhci_hcd\n"
+                   "[5.2] usb 1-2: device descriptor read/64, error -71\n"
+                   "[6.0] usb usb1-port2: unable to enumerate USB device\n"
+                   "[7.0] usb 1-3: USB disconnect, device number 4\n")
+        erreurs = dt.erreurs_dmesg(journal)
+        self.assertEqual(len(erreurs), 2)
+        self.assertIn("error -71", erreurs[0])
+
+    def test_poids_et_conseil(self):
+        self.assertIn("usb", dt.POIDS)
+        self.assertIn("--reparer-usb", dt.recommandations(rapport(usb="warn"))[0][1])
 
 
 if __name__ == "__main__":

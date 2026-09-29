@@ -5,7 +5,7 @@
  * partage contient le rapport lui-même, compressé dans l'adresse, et n'est envoyé à aucun serveur. */
 'use strict';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const SITE = 'https://crispinoza225.github.io/diagnotest/';
 
 /* ------------------------------------------------------------------ */
@@ -13,7 +13,7 @@ const SITE = 'https://crispinoza225.github.io/diagnotest/';
 /* ------------------------------------------------------------------ */
 // Poids de chaque test dans la note : les pièces chères ou gênantes à réparer comptent davantage.
 const POIDS = { battery: 3, ram: 3, screen: 3, touch: 3, storage: 2, cpu: 2, keyboard: 2, audio: 2, mic: 2, camera: 2,
-  sensors: 1, network: 1, gpu: 1, gamepad: 1 };
+  sensors: 1, network: 1, gpu: 1, gamepad: 1, usb: 2 };
 const VALEUR = { ok: 100, warn: 60, ko: 0 };
 const MENTIONS = [[90, 'Excellent'], [75, 'Bon'], [50, 'Moyen'], [0, 'Mauvais']];
 
@@ -59,6 +59,8 @@ const CONSEILS = {
   storage: { ko: 'Erreurs d’intégrité du stockage : sauvegardez vos données sans attendre et vérifiez le disque (version PC).',
     warn: 'Le stockage du navigateur est limité : libérez de l’espace.' },
   gpu: { ko: 'Accélération graphique indisponible : mettez à jour le pilote graphique ou le navigateur.' },
+  usb: { ko: 'Port USB défaillant : suivez l’assistant de réparation de la carte Ports USB ; si rien n’y fait, le connecteur est à remplacer.',
+    warn: 'Connexion USB instable : essayez un autre câble et nettoyez le port avec un cure-dent en bois.' },
   gamepad: { ko: 'Manette défectueuse signalée.', warn: 'Joystick qui dérive : un nettoyage peut suffire, sinon remplacez le module du joystick.' },
 };
 

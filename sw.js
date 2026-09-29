@@ -1,7 +1,7 @@
 /* Service worker : rend DiagnoTest utilisable hors ligne une fois installé (PWA).
  * Fichiers du site : réseau d'abord (pour recevoir les mises à jour), cache en secours.
  * Polices Google : cache d'abord. Le reste (test réseau vers jsDelivr) n'est jamais mis en cache. */
-const CACHE = 'diagnotest-v1.3.0';
+const CACHE = 'diagnotest-v1.4.0';
 const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/bilan.js', 'js/design.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 

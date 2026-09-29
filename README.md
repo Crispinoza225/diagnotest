@@ -1,6 +1,6 @@
 # 🩺 DiagnoTest
 
-**Testez le matériel d'un ordinateur ou d'un téléphone en quelques minutes : batterie, processeur, mémoire, écran, clavier, tactile, audio, caméra, capteurs, réseau, stockage, carte graphique et manettes. DiagnoTest donne une note de santé sur 100, des recommandations et un certificat PDF.**
+**Testez le matériel d'un ordinateur ou d'un téléphone en quelques minutes : batterie, processeur, mémoire, écran, clavier, tactile, audio, caméra, capteurs, réseau, stockage, carte graphique, manettes et ports USB (avec un assistant de réparation). DiagnoTest donne une note de santé sur 100, des recommandations et un certificat PDF.**
 
 DiagnoTest existe en quatre versions :
 
@@ -48,6 +48,7 @@ DiagnoTest existe en quatre versions :
 | 💾 **Stockage** | Quota, débit IndexedDB, vérification d'intégrité |
 | 🎮 **GPU** | Modèle, WebGL, benchmark fractal de 10 s (FPS moyen et minimum) |
 | 🕹️ **Manettes** | Tous les boutons et gâchettes, position des joysticks en direct, **mesure de la dérive (drift)**, vibrations |
+| 🔌 **Ports USB** | Détection de l'appareil branché et de sa norme USB, **test de faux contact**, **assistant de réparation** pas à pas adapté au système |
 | 📄 **Rapport** | Note et recommandations, export `.txt` / `.json`, copie, certificat PDF, lien de partage, historique |
 
 ### Version PC (`desktop/diagnotest.py`)
@@ -137,6 +138,10 @@ python desktop/diagnotest.py --only battery disk
 ```
 
 ```bash
+python desktop/diagnotest.py --reparer-usb   # réparations logicielles des ports USB, avec confirmation
+```
+
+```bash
 python desktop/diagnotest.py --stress 300 --ram-mb 4096
 ```
 
@@ -164,6 +169,8 @@ Chaque push et chaque Pull Request lancent les tests (`.github/workflows/tests.y
 | Gyroscope / accéléromètre | ✅ | ✅ | ✅ | ✅ | ✅ (autorisation demandée) |
 | Micro, caméra, GPS | ✅ | ✅ | ✅ HTTPS | ✅ HTTPS | ✅ HTTPS |
 | Manettes | ✅ | ✅ | ✅ (vibrations comprises) | ✅ sans vibrations | ✅ sans vibrations |
+| Ports USB : détection | ❌ | ❌ | ✅ Chrome, Edge | ✅ Chrome | ❌ |
+| Ports USB : faux contact, assistant | ✅ | ✅ | ✅ | ✅ | ✅ assistant seul |
 | Lampe torche | ✅ | ❌ | ✅ Android | ❌ | ❌ |
 | Certificat PDF | ✅ fichier `.html` | ✅ fichier `.html` | ✅ | ✅ | ✅ |
 | Hors ligne | ✅ | ✅ | ✅ une fois installé (PWA) | ✅ PWA | ✅ PWA |

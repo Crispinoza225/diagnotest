@@ -28,7 +28,7 @@ diagnotest/
 │   └── TECHNIQUE.md        # Ce fichier
 ├── tests/
 │   ├── e2e.cjs             # Tests de bout en bout de la version web (Playwright, Chromium sans écran)
-│   └── test_desktop.py     # Tests unitaires de la version PC (note de santé, rapport HTML)
+│   └── test_desktop.py     # Tests unitaires de la version PC (note de santé, rapport HTML, analyse USB)
 ├── .github/workflows/tests.yml       # Lance tous les tests à chaque push et Pull Request
 ├── .github/workflows/pages.yml       # Déploiement automatique sur GitHub Pages
 ├── .github/workflows/build-exe.yml   # Compilation et publication de DiagnoTest.exe
@@ -144,6 +144,8 @@ L'interface s'inspire de quatre sources, réimplémentées en CSS et JavaScript 
 | Photo, lampe | `ImageCapture.takePhoto()` (repli : image du flux vidéo), contrainte `torch` | La lampe n'apparaît que si `getCapabilities().torch` existe |
 | Boussole, luminosité | `deviceorientationabsolute`, `webkitCompassHeading` (iOS), `AmbientLightSensor` | |
 | Manettes | Gamepad API (`getGamepads`, `vibrationActuator.playEffect`) | Dérive : écart maximal des axes au repos pendant 3 s, seuil 0,1 |
+| Ports USB | WebUSB (`navigator.usb.requestDevice`, `getDevices`, événement `disconnect`), repli WebHID | Noms d'appareils insérés en `textContent` (données venues du matériel) |
+| Faux contact USB | `getBattery().charging` ou `charging` du pont natif, lu toutes les 200 ms | Chaque passage de « en charge » à « pas en charge » compte une coupure |
 | Bluetooth | `navigator.bluetooth.getAvailability()` | Chromium seulement |
 | Partage | `CompressionStream`, `crypto.subtle.digest` | Repli sans compression ou empreinte FNV-1a si indisponibles |
 
@@ -156,9 +158,11 @@ L'interface s'inspire de quatre sources, réimplémentées en CSS et JavaScript 
 | GPU | `Win32_VideoController` | `lspci` | `system_profiler SPDisplaysDataType` |
 | Barrettes de RAM | `Win32_PhysicalMemory` | — | — |
 | Santé des disques | `Get-PhysicalDisk` | `lsblk` (+ `smartctl` s'il est présent) | — |
+| Appareils USB | `Get-PnpDevice -PresentOnly` (statut et code de problème) | `lsusb` ou `/sys/bus/usb/devices`, erreurs de `dmesg` | `system_profiler SPUSBDataType -json` |
+| Réparation USB | `powercfg` (suspension sélective), `pnputil /scan-devices` et `/restart-device` | `/sys/module/usbcore/parameters/autosuspend`, `power/control` | — |
 | Température | `MSAcpi_ThermalZoneTemperature` (en administrateur) | `psutil.sensors_temperatures()` | — |
 
-La version PC calcule la même note de santé que la version web (`note_sante`, `recommandations`, poids propres à ses cinq tests) et enregistre, en plus du `.txt` et du `.json`, un rapport `.html` imprimable.
+La version PC calcule la même note de santé que la version web (`note_sante`, `recommandations`, poids propres à ses six tests) et enregistre, en plus du `.txt` et du `.json`, un rapport `.html` imprimable.
 
 Le benchmark CPU utilise `multiprocessing` (un processus par thread logique) pour contourner le GIL de Python.
 

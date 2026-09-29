@@ -26,6 +26,7 @@ const serveur = http.createServer((req, res) => {
 });
 
 let echecs = 0;
+const results_ok = (r) => r && r.status === 'ok';
 const verifier = (condition, message) => {
   console.log(`${condition ? '  ✓' : '  ✗'} ${message}`);
   if (!condition) echecs++;
@@ -36,8 +37,9 @@ const verifier = (condition, message) => {
   const base = `http://127.0.0.1:${serveur.address().port}/`;
   const navigateur = await chromium.launch();
   const erreurs = [];
-  const ouvrir = async (options = {}) => {
+  const ouvrir = async (options = {}, script = null) => {
     const ctx = await navigateur.newContext({ viewport: { width: 1280, height: 900 }, ...options });
+    if (script) await ctx.addInitScript(script);
     const page = await ctx.newPage();
     page.on('pageerror', (e) => erreurs.push(e.message));
     page.on('console', (m) => {
@@ -53,7 +55,7 @@ const verifier = (condition, message) => {
     const page = await ouvrir();
     await page.goto(`${base}?rapide`);
     await page.waitForFunction(() => results.system);
-    verifier(await page.locator('.card[data-test]').count() === 15, '15 cartes de test');
+    verifier(await page.locator('.card[data-test]').count() === 16, '16 cartes de test');
     verifier(await page.textContent('#padZone').then((t) => t.includes('Aucune manette')), 'la carte Manettes s’affiche sans manette');
 
     console.log('Note de santé et recommandations (calculs)');
@@ -145,6 +147,44 @@ const verifier = (condition, message) => {
     const table = await page.textContent('#compTable');
     verifier(table.includes('Ancien téléphone') && table.includes('Score mono-cœur'), 'la comparaison affiche les deux appareils et leurs mesures');
     verifier(await page.locator('#compTable td.mieux').count() > 0, 'la meilleure valeur est mise en évidence');
+
+    console.log('Ports USB');
+    // Faux WebUSB et fausse batterie : un appareil au nom piégé, et une charge qui se coupe par intermittence.
+    const usb = await ouvrir({}, () => {
+      const appareil = { manufacturerName: '<img src=x onerror=alert(3)>', productName: 'Clé', vendorId: 0x0781, productId: 0x5581, usbVersionMajor: 3, usbVersionMinor: 2 };
+      let choisi = false;
+      const faux = { requestDevice: async () => { choisi = true; return appareil; }, getDevices: async () => (choisi ? [appareil] : []),
+        addEventListener() {}, removeEventListener() {} };
+      Object.defineProperty(Navigator.prototype, 'usb', { get: () => faux });
+      window.coupe = false;
+      let lectures = 0; // une lecture sur trois voit la charge coupée
+      Navigator.prototype.getBattery = async () => ({ level: 0.5, addEventListener() {}, get charging() { return !window.coupe || ++lectures % 3 !== 0; } });
+    });
+    await usb.goto(`${base}?rapide`);
+    await usb.waitForFunction(() => results.system);
+    await usb.click('#usbDetectBtn');
+    await usb.waitForFunction(() => results.usb);
+    const liste = await usb.innerHTML('#usbListe');
+    verifier(results_ok(await usb.evaluate(() => results.usb)) && liste.includes('&lt;img') && !liste.includes('<img'), 'l’appareil USB branché est détecté, son nom affiché comme du texte');
+    verifier(/USB 3\.2/.test(liste), 'la norme USB de l’appareil est indiquée');
+    await usb.click('#usbWiggleBtn');
+    await usb.waitForFunction(() => /Aucune coupure/.test(results.usb?.data['Faux contact'] || ''));
+    verifier(true, 'connexion stable : aucune coupure');
+    await usb.evaluate(() => { window.coupe = true; });
+    await usb.click('#usbWiggleBtn');
+    await usb.waitForFunction(() => results.usb?.status === 'ko');
+    verifier(/coupure/.test(await usb.evaluate(() => results.usb.data['Faux contact'])) && await usb.isVisible('#usbRepa'), 'un faux contact est détecté et ouvre l’assistant de réparation');
+    const etapes = await usb.evaluate(() => ({ win: etapesUSB('Windows 10/11').map((e) => e[0]), ios: etapesUSB('iOS 17').map((e) => e[0]) }));
+    verifier(etapes.win.includes('Gestionnaire de périphériques') && etapes.ios.includes('Autoriser les accessoires') && etapes.win.at(-1) === 'Réparation matérielle', 'l’assistant adapte les étapes au système');
+    await usb.click('#usbRepa [data-r=suite]');
+    await usb.click('#usbRepa [data-r=ok]');
+    verifier(await usb.evaluate(() => results.usb.status === 'ok' && /Nettoyer le port/.test(results.usb.data['Réparation'])), '« C’est réglé » à l’étape 2 valide le port');
+    await usb.click('#usbRepairBtn');
+    let n = 0;
+    while (await usb.locator('#usbRepa [data-r=suite]').count() && n++ < 20) await usb.click('#usbRepa [data-r=suite]');
+    verifier(await usb.evaluate(() => results.usb.status === 'ko' && /matérielle/.test(results.usb.data['Réparation'])), 'toutes les étapes épuisées : réparation matérielle conseillée');
+    verifier(await usb.evaluate(() => recommandations().some((c) => c.id === 'usb')), 'le bilan recommande de réparer le port');
+    await usb.close();
 
     console.log('Téléphone (390 px)');
     const mobile = await ouvrir({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

@@ -46,7 +46,7 @@
         <a href="https://github.com/Crispinoza225/diagnotest/blob/main/docs/GUIDE.md#iphone-et-ipad" class="btn lg dl-link" id="iosLink">iPhone</a>
       </div>
       <div class="stats rise" style="--d:800ms">
-        <div class="stat"><b data-count="15">0</b><span>tests matériels</span></div>
+        <div class="stat"><b data-count="16">0</b><span>tests matériels</span></div>
         <div class="stat"><b data-count="0">0</b><span>résultat envoyé</span></div>
         <div class="stat"><b data-count="100" data-suffix=" %">0</b><span>dans le navigateur</span></div>
       </div>
@@ -101,7 +101,7 @@
       <h2>Lancez les tests, un par un.</h2>
     </div>
     <div class="progress-total">
-      <span class="label" id="doneCount">0 / 15 tests effectués</span>
+      <span class="label" id="doneCount">0 / 16 tests effectués</span>
       <div class="bar"><div id="doneBar"></div></div>
     </div>
   </div>
@@ -306,6 +306,20 @@
       <p class="out" id="padOut"></p>
       <div id="padZone" class="pad-zone"></div>
       <div class="verdict" data-for="gamepad"></div>
+    </section>
+
+    <section class="card wide" id="t-usb" data-test="usb" data-title="Ports USB">
+      <h2>🔌 Ports USB</h2>
+      <p class="hint">Branchez un appareil (clé USB, souris, chargeur…) sur le port à tester, puis lancez les tests. Recommencez pour chaque port. En cas de problème, l’assistant vous guide pas à pas jusqu’à la réparation.</p>
+      <div class="row">
+        <button class="btn primary" id="usbDetectBtn">Détecter l’appareil branché</button>
+        <button class="btn" id="usbWiggleBtn">Test de faux contact (30 s)</button>
+        <button class="btn" id="usbRepairBtn">Assistant de réparation</button>
+      </div>
+      <p class="out" id="usbOut"></p>
+      <ul id="usbListe" class="usb-liste"></ul>
+      <div id="usbRepa" class="usb-repa" hidden></div>
+      <div class="verdict" data-for="usb"></div>
     </section>
 
   </main>

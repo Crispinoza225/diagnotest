@@ -187,6 +187,14 @@ Branchez une manette (USB ou Bluetooth : Xbox, PlayStation, Switch Pro, manettes
 - **Mesurer la dérive des joysticks** : ne touchez à rien pendant 3 s. Au repos, un joystick en bon état revient au centre. Au-delà de 10 %, il **dérive** (*drift*) : le personnage ou la caméra bouge tout seul en jeu.
 - **Tester les vibrations** : la manette doit vibrer (Chrome et Edge).
 
+### 🔌 Ports USB
+Testez un port à la fois, avec un appareil branché dessus.
+- **Détecter l'appareil branché** (Chrome et Edge, sur ordinateur et Android) : choisissez l'appareil dans la liste. S'il y figure, le port fonctionne ; sa norme (USB 2.0, 3.2…) est affichée. S'il n'apparaît pas alors qu'il est branché, le port, le câble ou l'appareil n'est pas reconnu.
+- **Test de faux contact** : branchez le chargeur sur le port (ou un appareil déjà détecté), lancez le test et remuez doucement la prise pendant 30 s sans la débrancher. Chaque coupure de charge est comptée : une seule suffit à révéler un faux contact.
+- **Assistant de réparation** : il propose les solutions de la plus simple à la plus lourde, adaptées à votre système : changer de câble, nettoyer le port (cure-dent en bois ou air sec, jamais de métal), redémarrer, puis les réglages propres à Windows, Android, iPhone, macOS ou Linux, et enfin la réparation matérielle. Touchez « C'est réglé » dès que le port remarche.
+
+Sur PC, `DiagnoTest.exe --reparer-usb` (en administrateur) répare automatiquement ce qui peut l'être par logiciel : voir [la version PC](#version-pc-python).
+
 ---
 
 ## Application Android
@@ -273,11 +281,27 @@ python desktop/diagnotest.py
 | Option | Effet |
 |---|---|
 | `--quick` | Test rapide, sans stress ni benchmark disque (environ 20 s) |
-| `--only cpu ram` | Lance seulement certains tests : `system`, `battery`, `cpu`, `ram`, `disk`, `network` |
+| `--only cpu ram` | Lance seulement certains tests : `system`, `battery`, `cpu`, `ram`, `disk`, `usb`, `network` |
+| `--reparer-usb` | Tente de réparer les ports USB, puis quitte (voir ci-dessous) |
+| `--oui` | Avec `--reparer-usb` : applique sans demander de confirmation |
 | `--stress 300` | Stress CPU de 300 s (60 par défaut, 0 pour le désactiver) |
 | `--ram-mb 4096` | Quantité de RAM à tester, plafonnée à 50 % de la mémoire libre |
 | `--disk-mb 1024` | Taille du fichier de test disque |
 | `--output rapports` | Dossier où enregistrer le rapport |
+
+### Réparer les ports USB
+
+Le test `usb` liste les appareils USB et signale ceux en erreur : sous Windows, les codes du Gestionnaire de périphériques (code 43 : l'appareil s'est arrêté après une erreur ; code 28 : pilote absent…) ; sous Linux, les erreurs USB du journal du noyau (`dmesg`, qui peut demander `sudo`).
+
+`--reparer-usb` affiche les réparations possibles et les applique après confirmation :
+
+| Système | Réparation automatique |
+|---|---|
+| Windows | Désactive la **suspension sélective USB** (cause fréquente de ports qui se coupent) ; en administrateur, relance la détection du matériel (`pnputil /scan-devices`) et redémarre chaque appareil USB en erreur (`pnputil /restart-device`) |
+| Linux | En `sudo`, désactive la mise en veille automatique des ports USB jusqu'au prochain redémarrage |
+| macOS | Aucune : les conseils (SMC, Rapport système) sont affichés |
+
+Les appareils sont ensuite relistés pour vérifier le résultat. Un connecteur abîmé ne se répare pas par logiciel : les conseils affichés à la fin indiquent comment le vérifier.
 
 ### Lire les résultats
 
@@ -359,6 +383,7 @@ Commencez par le **diagnostic express**, puis faites les tests de la liste « À
 - [ ] Clavier : toutes les touches répondent
 - [ ] Haut-parleurs gauche et droite, micro (bruit de fond normal), caméras avant et arrière, flash
 - [ ] Manettes (console, PC de jeu) : tous les boutons, aucune dérive
+- [ ] Ports USB : chaque port reconnaît un appareil, aucun faux contact
 - [ ] Capteurs, vibreur, GPS (téléphone)
 - [ ] Wi-Fi fonctionnel
 - [ ] Disques : santé « Healthy » (version PC)

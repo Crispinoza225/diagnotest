@@ -1448,6 +1448,164 @@ function initReport() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Ports USB : détection, faux contact, assistant de réparation        */
+/* ------------------------------------------------------------------ */
+// Les noms d'appareils viennent du matériel : ils sont toujours insérés avec textContent.
+const ETAPES_USB_COMMUNES = {
+  debut: [
+    ['Changer de câble et d’appareil', 'Branchez un autre câble et un autre appareil sur ce port, puis cet appareil sur un autre port. Si tout marche avec l’autre câble, c’est le câble qui est usé : le port n’y est pour rien.'],
+    ['Nettoyer le port', 'Appareil éteint, éclairez l’intérieur du port. Retirez poussière et peluches avec un cure-dent en bois ou une bombe d’air sec, jamais avec une aiguille ou un trombone (risque de court-circuit). Sur un téléphone, la poussière de poche empêche souvent la prise de s’enfoncer jusqu’au bout.'],
+    ['Redémarrer complètement', 'Éteignez l’appareil (pas une simple mise en veille), attendez 30 secondes et rallumez-le : le contrôleur USB est réinitialisé.'],
+  ],
+  fin: [
+    ['Inspecter le connecteur', 'Regardez le port à la lampe : languettes tordues, cassées, noircies ou verdâtres (oxydation), ou prise qui bouge beaucoup quand le câble est branché ? Le connecteur est alors abîmé.'],
+    ['Réparation matérielle', 'Le port est défaillant. Sur un téléphone, le connecteur de charge se remplace chez un réparateur (il est souvent sur une petite carte vissée, réparation courante et peu chère). Sur un ordinateur, le port est généralement soudé à la carte mère : en attendant, un hub USB ou une station d’accueil sur un port qui marche dépanne.'],
+  ],
+};
+const ETAPES_USB_OS = {
+  Windows: [
+    ['Réparation automatique', 'Téléchargez DiagnoTest.exe (lien en bas de page) et lancez dans un terminal administrateur : DiagnoTest.exe --reparer-usb. Il désactive la suspension sélective USB, relance la détection du matériel et redémarre les appareils USB en erreur.'],
+    ['Gestionnaire de périphériques', 'Clic droit sur Démarrer → Gestionnaire de périphériques → Contrôleurs de bus USB. Un triangle jaune signale une erreur : clic droit → Désinstaller l’appareil, puis menu Action → Rechercher les modifications sur le matériel. Faites de même pour chaque « Concentrateur USB racine », puis redémarrez.'],
+    ['Pilotes', 'Installez les pilotes du chipset et de l’USB depuis le site du fabricant du PC, et les mises à jour de Windows Update → Options avancées → Mises à jour facultatives.'],
+  ],
+  Android: [
+    ['Mode USB', 'Câble branché à un ordinateur, déroulez les notifications et touchez « Recharge via USB » : choisissez « Transfert de fichiers ». Pour une clé ou une souris, il faut un adaptateur OTG ; certains téléphones demandent d’activer OTG dans les paramètres.'],
+    ['Mode sans échec', 'Appui long sur « Éteindre » dans le menu d’arrêt pour redémarrer en mode sans échec. Si le port marche alors, une application perturbe l’USB : désinstallez les dernières installées.'],
+  ],
+  iOS: [
+    ['Autoriser les accessoires', 'Déverrouillez l’iPhone avant de brancher, et touchez « Se fier » si un ordinateur le demande. Réglages → Face ID et code : activez « Accessoires USB » si l’iPhone reste verrouillé longtemps.'],
+    ['Câble certifié', 'Utilisez un câble d’origine ou certifié MFi : les autres provoquent le message « Cet accessoire n’est peut-être pas pris en charge ».'],
+  ],
+  macOS: [
+    ['Rapport système', 'Menu Pomme → À propos de ce Mac → Plus d’infos → Rapport système → USB. Si l’appareil n’y figure pas, le port ou le câble n’est pas reconnu.'],
+    ['Réinitialiser le SMC', 'Mac Intel : réinitialisez le SMC (procédure Apple propre à votre modèle). Mac Apple Silicon : éteignez-le 30 secondes, cela suffit.'],
+  ],
+  Linux: [
+    ['Réparation automatique', 'sudo python3 diagnotest.py --reparer-usb désactive la mise en veille automatique des ports USB. Pour voir les erreurs, lancez sudo dmesg -w et branchez l’appareil.'],
+  ],
+};
+
+function etapesUSB(os) {
+  const cle = /^(iOS|iPadOS)/.test(os) ? 'iOS' : Object.keys(ETAPES_USB_OS).find((k) => os.startsWith(k));
+  return [...ETAPES_USB_COMMUNES.debut, ...(ETAPES_USB_OS[cle] || []), ...ETAPES_USB_COMMUNES.fin];
+}
+
+function initUSB() {
+  const out = $('#usbOut'), liste = $('#usbListe'), repa = $('#usbRepa');
+  const nomUSB = (d) => [d.manufacturerName, d.productName].filter(Boolean).join(' ') || d.productName
+    || `Appareil ${d.vendorId.toString(16).padStart(4, '0')}:${d.productId.toString(16).padStart(4, '0')}`;
+
+  const afficher = (appareils) => {
+    liste.replaceChildren(...appareils.map((d) => {
+      const li = document.createElement('li');
+      const b = document.createElement('b');
+      b.textContent = d.nom;
+      li.append(b, document.createTextNode(d.detail ? ` — ${d.detail}` : ''));
+      return li;
+    }));
+  };
+
+  $('#usbDetectBtn').onclick = async () => {
+    const api = navigator.usb ? 'usb' : navigator.hid ? 'hid' : null;
+    if (!api) {
+      out.textContent = 'Ce navigateur ne peut pas lister les appareils USB (Chrome ou Edge le peuvent, sur ordinateur et Android). Utilisez le test de faux contact avec un chargeur, ou DiagnoTest.exe sur PC.';
+      setResult('usb', 'info', { 'Détection': 'Non prise en charge par ce navigateur' });
+      return;
+    }
+    out.textContent = 'Choisissez dans la liste l’appareil branché sur le port à tester.';
+    try {
+      if (api === 'usb') await navigator.usb.requestDevice({ filters: [] });
+      else await navigator.hid.requestDevice({ filters: [] });
+    } catch (e) {
+      if (e.name === 'NotFoundError') {
+        out.textContent = 'Aucun appareil choisi. S’il n’apparaissait pas dans la liste alors qu’il est branché, le port, le câble ou l’appareil n’est pas reconnu : essayez un autre câble, puis l’assistant de réparation.';
+        return;
+      }
+      out.textContent = `Détection impossible : ${e.message}`;
+      return;
+    }
+    const appareils = api === 'usb'
+      ? (await navigator.usb.getDevices()).map((d) => ({ nom: nomUSB(d), detail: `USB ${d.usbVersionMajor}.${d.usbVersionMinor}` }))
+      : (await navigator.hid.getDevices()).map((d) => ({ nom: d.productName || 'Périphérique HID', detail: 'clavier, souris ou manette' }));
+    afficher(appareils);
+    out.textContent = `${appareils.length} appareil(s) reconnu(s). Le port fonctionne s’il y figure. Recommencez sur chaque port.`;
+    const dernier = appareils[appareils.length - 1];
+    setResult('usb', 'ok', { 'Appareil détecté': dernier?.nom, 'Norme': dernier?.detail });
+  };
+
+  // Faux contact : on suit l'état de charge (et les débranchements USB) pendant que l'utilisateur remue le câble.
+  $('#usbWiggleBtn').onclick = async () => {
+    const btn = $('#usbWiggleBtn');
+    let lireCharge = null, batterie = null;
+    if (nativeCall('getBatteryInfo')?.charging !== undefined) lireCharge = () => !!nativeCall('getBatteryInfo')?.charging;
+    else if (navigator.getBattery) {
+      try { batterie = await navigator.getBattery(); lireCharge = () => batterie.charging; } catch { /* API refusée */ }
+    }
+    const suivis = navigator.usb ? await navigator.usb.getDevices().catch(() => []) : [];
+    if (!lireCharge && !suivis.length) {
+      out.textContent = 'Ce navigateur ne signale ni la charge ni les appareils USB : faites le test à l’œil, en regardant si le voyant de charge clignote quand vous remuez le câble.';
+      return;
+    }
+    if (lireCharge && !lireCharge() && !suivis.length) {
+      out.textContent = 'Branchez d’abord le chargeur sur ce port (le voyant de charge doit s’allumer), puis relancez le test.';
+      return;
+    }
+    let coupures = 0, etat = lireCharge ? lireCharge() : true;
+    const onDeco = () => { coupures++; };
+    navigator.usb?.addEventListener('disconnect', onDeco);
+    const total = duree(30000), debut = performance.now();
+    btn.disabled = true;
+    while (performance.now() - debut < total) {
+      if (lireCharge) {
+        const maintenant = lireCharge();
+        if (etat && !maintenant) coupures++;
+        etat = maintenant;
+      }
+      const reste = Math.ceil((total - (performance.now() - debut)) / 1000);
+      out.textContent = `Remuez doucement la prise dans tous les sens, sans la débrancher… ${reste} s — coupures : ${coupures}`;
+      await sleep(200);
+    }
+    navigator.usb?.removeEventListener('disconnect', onDeco);
+    btn.disabled = false;
+    if (coupures) {
+      out.textContent = `${coupures} coupure(s) : faux contact. Le port est sale ou abîmé, ou le câble est usé. Suivez l’assistant de réparation.`;
+      setResult('usb', 'ko', { 'Faux contact': `${coupures} coupure(s) en ${Math.round(total / 1000)} s` });
+      ouvrirAssistant();
+    } else {
+      out.textContent = 'Aucune coupure : la connexion est stable.';
+      setResult('usb', 'ok', { 'Faux contact': `Aucune coupure en ${Math.round(total / 1000)} s` });
+    }
+  };
+
+  const ouvrirAssistant = () => {
+    const etapes = etapesUSB(detectOS(navigator.userAgent));
+    let i = 0;
+    const montrer = () => {
+      const [titre, texte] = etapes[i];
+      const derniere = i === etapes.length - 1;
+      repa.hidden = false;
+      repa.innerHTML = `<span class="label">Étape ${i + 1} / ${etapes.length}</span><h3></h3><p></p><div class="row">
+        <button class="btn primary" data-r="ok">✓ C’est réglé</button>
+        <button class="btn" data-r="suite">${derniere ? '✗ Toujours en panne' : 'Toujours en panne → étape suivante'}</button></div>`;
+      repa.querySelector('h3').textContent = titre;
+      repa.querySelector('p').textContent = texte;
+      repa.querySelector('[data-r=ok]').onclick = () => {
+        repa.innerHTML = '<p class="usb-fini">Port réparé ✓ Relancez le test de faux contact pour confirmer.</p>';
+        setResult('usb', 'ok', { 'Réparation': `Réglé à l’étape « ${titre} »` });
+      };
+      repa.querySelector('[data-r=suite]').onclick = () => {
+        if (!derniere) { i++; montrer(); return; }
+        repa.innerHTML = '<p class="usb-fini">Toutes les solutions ont été essayées : le port doit être réparé ou remplacé.</p>';
+        setResult('usb', 'ko', { 'Réparation': 'Port toujours en panne : réparation matérielle nécessaire' });
+      };
+    };
+    montrer();
+    repa.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+  $('#usbRepairBtn').onclick = ouvrirAssistant;
+}
+
+/* ------------------------------------------------------------------ */
 /* Thème                                                               */
 /* ------------------------------------------------------------------ */
 function initTheme() {
@@ -1480,5 +1638,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initStorage();
   initGPU();
   initGamepad();
+  initUSB();
   initReport();
 });

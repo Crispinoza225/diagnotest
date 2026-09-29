@@ -9,11 +9,13 @@ Utilisation :
     python diagnotest.py              # tous les tests
     python diagnotest.py --quick      # tests rapides (sans stress ni disque)
     python diagnotest.py --only cpu ram
+    python diagnotest.py --reparer-usb   # tente de réparer les ports USB (confirmation demandée)
     python diagnotest.py --help
 """
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import multiprocessing as mp
 import os
@@ -32,7 +34,7 @@ try:
 except ImportError:  # le script fonctionne en mode dégradé sans psutil
     psutil = None
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 IS_WIN, IS_LINUX, IS_MAC = sys.platform == "win32", sys.platform.startswith("linux"), sys.platform == "darwin"
 
@@ -438,6 +440,191 @@ def test_disks(bench_mb: int) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Ports USB                                                                   #
+# --------------------------------------------------------------------------- #
+# Codes de problème Windows (CM_PROB_*) les plus fréquents pour l'USB.
+PROBLEMES_WIN = {
+    10: "ne peut pas démarrer (code 10)", 22: "désactivé (code 22)", 28: "pilote absent (code 28)",
+    31: "pilote en erreur (code 31)", 39: "pilote introuvable ou corrompu (code 39)",
+    43: "arrêté après une erreur signalée par l'appareil (code 43)",
+}
+# Messages du noyau Linux qui trahissent un port, un câble ou un appareil USB défaillant.
+MOTIF_DMESG = re.compile(r"usb.*(error|fail|over-current|unable to enumerate|not accepting address|disabled by hub|cannot|device not responding)", re.I)
+# Plan d'alimentation Windows : sous-groupe « Paramètres USB » et réglage « Suspension sélective USB ».
+GUID_USB, GUID_SUSPENSION = "2a737441-1930-4402-8d77-b2bebba308a3", "48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
+
+
+def parse_pnp(texte: str) -> list[dict]:
+    """Sortie JSON de Get-PnpDevice → [{nom, statut, probleme, id}]."""
+    try:
+        donnees = json.loads(texte) if texte.strip() else []
+    except ValueError:
+        return []
+    if isinstance(donnees, dict):  # PowerShell renvoie un objet seul au lieu d'une liste d'un élément
+        donnees = [donnees]
+    appareils = []
+    for d in donnees:
+        probleme = d.get("Problem") or 0
+        if isinstance(probleme, str):  # selon la version : numéro ou nom de l'énumération (CM_PROB_…)
+            m = re.search(r"\d+", probleme)
+            probleme = int(m.group()) if m else (0 if probleme in ("", "CM_PROB_NONE") else -1)
+        appareils.append({"nom": d.get("FriendlyName") or d.get("InstanceId") or "Appareil USB",
+                          "statut": d.get("Status") or "", "probleme": probleme, "id": d.get("InstanceId") or ""})
+    return appareils
+
+
+def en_erreur(appareil: dict) -> bool:
+    return bool(appareil["probleme"]) or appareil["statut"] in ("Error", "Degraded")
+
+
+def erreurs_dmesg(texte: str, maximum: int = 8) -> list[str]:
+    return [l.strip() for l in texte.splitlines() if MOTIF_DMESG.search(l)][-maximum:]
+
+
+def lister_usb() -> tuple[list[str], list[str], list[dict]]:
+    """Renvoie (appareils, problèmes, appareils Windows en erreur)."""
+    appareils: list[str] = []
+    problemes: list[str] = []
+    fautifs: list[dict] = []
+    if IS_WIN:
+        pnp = parse_pnp(ps("Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -like 'USB*' -or $_.Class -eq 'USB' } | "
+                           "Select-Object FriendlyName,Status,Problem,InstanceId | ConvertTo-Json -Compress"))
+        for a in pnp:
+            appareils.append(a["nom"])
+            if en_erreur(a):
+                fautifs.append(a)
+                problemes.append(f"{a['nom']} : {PROBLEMES_WIN.get(a['probleme'], a['statut'] or 'en erreur')}")
+    elif IS_LINUX:
+        if shutil.which("lsusb"):
+            appareils = [re.sub(r"^Bus \d+ Device \d+: ID \S+\s*", "", l).strip() or l for l in run("lsusb").splitlines() if l.strip()]
+        else:
+            for chemin in sorted(glob.glob("/sys/bus/usb/devices/*/product")):
+                try:
+                    with open(chemin, encoding="utf-8", errors="replace") as f:
+                        appareils.append(f.read().strip())
+                except OSError:
+                    pass
+        appareils = [a for a in appareils if "root hub" not in a.lower()]
+        problemes = erreurs_dmesg(run("dmesg"))  # dmesg peut exiger les droits administrateur : liste vide sinon
+    elif IS_MAC:
+        try:
+            racine = json.loads(run(["system_profiler", "SPUSBDataType", "-json"], timeout=60) or "{}")
+        except ValueError:
+            racine = {}
+
+        def parcourir(noeud):
+            if isinstance(noeud, dict):
+                if "_name" in noeud and "vendor_id" in noeud:
+                    appareils.append(noeud["_name"])
+                for v in noeud.values():
+                    parcourir(v)
+            elif isinstance(noeud, list):
+                for v in noeud:
+                    parcourir(v)
+        parcourir(racine)
+    return appareils, problemes, fautifs
+
+
+def test_usb() -> None:
+    title("Ports USB")
+    appareils, problemes, _ = lister_usb()
+    data: dict = {"Appareils USB détectés": len(appareils)}
+    for i, a in enumerate(appareils[:15]):
+        data[f"USB {i + 1}"] = a
+    if len(appareils) > 15:
+        data["Autres"] = f"{len(appareils) - 15} appareils de plus"
+    status = "ok"
+    if problemes:
+        status = "warn"
+        for i, p in enumerate(problemes):
+            data[f"Problème {i + 1}"] = p
+        data["Diagnostic"] = ("Erreurs USB relevées" + (" depuis le démarrage" if IS_LINUX else "")
+                              + " : relancez avec --reparer-usb pour tenter une réparation logicielle.")
+    elif not appareils:
+        status = "info"
+        data["Remarque"] = "Liste des appareils USB indisponible sur ce système."
+    else:
+        data["Diagnostic"] = "Aucune erreur USB détectée. Pour un port précis, branchez-y un appareil et relancez ce test."
+    for k, v in data.items():
+        line(k, v)
+    verdict("usb", status, data)
+
+
+def reparer_usb(demander: bool = True) -> None:
+    """Réparations logicielles des ports USB. Un connecteur abîmé, lui, ne se répare pas par logiciel."""
+    title("Réparation des ports USB")
+    _, problemes_avant, fautifs = lister_usb()
+    line("Problèmes détectés", len(problemes_avant))
+    for p in problemes_avant:
+        line("", p)
+    actions: list[tuple[str, list[list[str]]]] = []
+    conseils: list[str] = []
+    if IS_WIN:
+        actions.append(("Désactiver la suspension sélective USB (plan d'alimentation actuel)",
+                        [["powercfg", f"/set{m}valueindex", "SCHEME_CURRENT", GUID_USB, GUID_SUSPENSION, "0"] for m in ("ac", "dc")]
+                        + [["powercfg", "/setactive", "SCHEME_CURRENT"]]))
+        try:
+            import ctypes
+            admin = bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            admin = False
+        if admin:
+            actions.append(("Relancer la détection du matériel", [["pnputil", "/scan-devices"]]))
+            for a in fautifs:
+                actions.append((f"Redémarrer « {a['nom']} »", [["pnputil", "/restart-device", a["id"]]]))
+        else:
+            conseils.append("Relancez DiagnoTest en administrateur (clic droit → Exécuter en tant qu'administrateur) "
+                            "pour relancer la détection du matériel et redémarrer les appareils en erreur.")
+        conseils.append("Si un appareil reste en erreur : Gestionnaire de périphériques → Contrôleurs de bus USB → "
+                        "clic droit sur « Concentrateur USB racine » → Désinstaller, puis redémarrez le PC (Windows le réinstalle).")
+    elif IS_LINUX:
+        if os.geteuid() == 0:
+            commandes = [["sh", "-c", "echo -1 > /sys/module/usbcore/parameters/autosuspend"]]
+            commandes += [["sh", "-c", f"echo on > {c}"] for c in glob.glob("/sys/bus/usb/devices/*/power/control")]
+            actions.append(("Désactiver la mise en veille automatique des ports USB (jusqu'au redémarrage)", commandes))
+        else:
+            conseils.append("Relancez avec sudo pour désactiver la mise en veille automatique des ports USB "
+                            "(sudo python3 diagnotest.py --reparer-usb).")
+        conseils.append("Pour réinitialiser un appareil : sudo usbreset <ID> (paquet usbutils), ou débranchez-le 10 s.")
+    elif IS_MAC:
+        conseils.append("Sur un Mac Intel, réinitialisez le SMC ; sur un Mac Apple Silicon, éteignez-le 30 s. "
+                        "Rapport système → USB montre si l'appareil est reconnu.")
+    conseils += ["Essayez un autre câble et un autre appareil sur le même port : cela distingue un port en panne d'un câble usé.",
+                 "Éteignez l'appareil et nettoyez le port avec un cure-dent en bois ou une brosse antistatique (jamais d'objet métallique).",
+                 "Si le port ne fonctionne toujours pas, le connecteur est abîmé : il faut le faire remplacer par un réparateur."]
+    if actions:
+        print(f"\n  {C['b']}Réparations proposées :{C['0']}")
+        for texte, _ in actions:
+            print(f"    • {texte}")
+        reponse = "o"
+        if demander:
+            try:
+                reponse = input("\n  Appliquer ces réparations ? [o/N] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                reponse = "n"
+        if reponse.startswith("o"):
+            for texte, commandes in actions:
+                ok = True
+                for cmd in commandes:
+                    try:
+                        ok &= subprocess.run(cmd, capture_output=True, timeout=120).returncode == 0
+                    except (OSError, subprocess.SubprocessError):
+                        ok = False
+                print(f"  {C['ok'] + ICON['ok'] if ok else C['ko'] + ICON['ko']}{C['0']} {texte}")
+            time.sleep(3)  # le temps que les appareils réapparaissent
+            _, problemes_apres, _ = lister_usb()
+            if IS_WIN or not problemes_avant:
+                line("Problèmes après réparation", len(problemes_apres))
+        else:
+            print("  Aucune modification effectuée.")
+    else:
+        print(f"  {C['dim']}Aucune réparation automatique possible ici.{C['0']}")
+    print(f"\n  {C['b']}À faire vous-même :{C['0']}")
+    for c in conseils:
+        print(f"    • {c}")
+
+
+# --------------------------------------------------------------------------- #
 # Réseau                                                                      #
 # --------------------------------------------------------------------------- #
 def test_network() -> None:
@@ -494,7 +681,7 @@ def test_network() -> None:
 # --------------------------------------------------------------------------- #
 # Mêmes règles que la version web (js/bilan.js) : OK = 100, à surveiller = 60, défaut = 0, pondérés ;
 # un défaut matériel plafonne la note à 69 (au mieux « Moyen »). Une absence de réseau n'est pas une panne.
-POIDS = {"batterie": 3, "ram": 3, "disques": 3, "cpu": 2, "reseau": 1}
+POIDS = {"batterie": 3, "ram": 3, "disques": 3, "cpu": 2, "usb": 2, "reseau": 1}
 VALEUR = {"ok": 100, "warn": 60, "ko": 0}
 MENTIONS = ((90, "Excellent"), (75, "Bon"), (50, "Moyen"), (0, "Mauvais"))
 CONSEILS = {
@@ -505,6 +692,8 @@ CONSEILS = {
     "ram": {"ko": "Erreurs mémoire : barrette défectueuse probable. Confirmez avec MemTest86 avant de la remplacer."},
     "disques": {"ko": "Disque en mauvaise santé : sauvegardez vos données sans attendre et prévoyez son remplacement.",
                 "warn": "Disque à surveiller (lent ou presque plein) : libérez de l'espace et sauvegardez vos données."},
+    "usb": {"ko": "Port USB défaillant : essayez un autre câble, nettoyez le port ; s'il ne répond toujours pas, faites remplacer le connecteur.",
+            "warn": "Erreurs USB relevées : lancez « diagnotest --reparer-usb », puis testez chaque port avec un autre câble."},
     "reseau": {"ko": "Pas de connexion pendant le test : vérifiez le câble, le Wi-Fi ou le pare-feu.",
                "warn": "Connexion lente, ou bloquée pour ce programme par le pare-feu ou l'antivirus."},
 }
@@ -573,7 +762,7 @@ footer{{margin-top:24px;color:#6b6a66;font-size:12px}}</style></head><body>
 # --------------------------------------------------------------------------- #
 # Programme principal                                                         #
 # --------------------------------------------------------------------------- #
-TESTS = ["system", "battery", "cpu", "ram", "disk", "network"]
+TESTS = ["system", "battery", "cpu", "ram", "disk", "usb", "network"]
 
 
 def main() -> None:
@@ -584,10 +773,16 @@ def main() -> None:
     parser.add_argument("--ram-mb", type=int, default=1024, help="quantité de RAM à tester en Mo (défaut 1024)")
     parser.add_argument("--disk-mb", type=int, default=512, help="taille du fichier de benchmark disque (défaut 512)")
     parser.add_argument("--output", default=".", help="dossier où enregistrer le rapport")
+    parser.add_argument("--reparer-usb", action="store_true", help="tenter de réparer les ports USB, puis quitter")
+    parser.add_argument("--oui", action="store_true", help="avec --reparer-usb : appliquer sans demander de confirmation")
     parser.add_argument("--version", action="version", version=f"DiagnoTest Desktop {__version__}")
     args = parser.parse_args()
     if args.quick:
         args.stress, args.disk_mb, args.ram_mb = 0, 0, min(args.ram_mb, 256)
+    if args.reparer_usb:
+        print(f"{C['b']}DiagnoTest Desktop {__version__}{C['0']} — réparation des ports USB")
+        reparer_usb(demander=not args.oui)
+        return
 
     print(f"{C['b']}DiagnoTest Desktop {__version__}{C['0']} — {datetime.now():%d/%m/%Y %H:%M}")
     if not args.quick and not args.only:
@@ -603,6 +798,7 @@ def main() -> None:
         "cpu": lambda: test_cpu(args.stress),
         "ram": lambda: test_ram(args.ram_mb),
         "disk": lambda: test_disks(args.disk_mb),
+        "usb": test_usb,
         "network": test_network,
     }
     for name in TESTS:
