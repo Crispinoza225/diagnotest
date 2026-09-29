@@ -1,0 +1,42 @@
+name: Tests
+
+# À chaque push et à chaque Pull Request : la version web est testée dans Chromium sans écran
+# (diagnostic express, note, certificat, historique, lien de partage), et la version PC par unittest.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Installer Playwright et Chromium
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+      - name: Tests de bout en bout
+        run: node tests/e2e.cjs
+
+  pc:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psutil
+      - name: Tests unitaires
+        run: python -m unittest discover -s tests -v
+      - name: Diagnostic rapide réel
+        run: python desktop/diagnotest.py --quick --only system ram --output rapport

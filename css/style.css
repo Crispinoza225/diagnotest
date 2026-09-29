@@ -386,3 +386,88 @@ dialog pre {
 
 /* Dans les applications Android et iOS, les liens de téléchargement n'ont pas de sens. */
 .in-app .dl-link { display: none; }
+
+/* ------------------------------------------------------------------ */
+/* Bilan de santé (js/bilan.js)                                        */
+/* ------------------------------------------------------------------ */
+.bilan {
+  max-width: 1200px; margin: 0 auto; width: calc(100% - 32px); display: grid; gap: 24px; align-items: center;
+  grid-template-columns: auto minmax(0, 1.1fr) minmax(0, 1fr); padding: 26px; background: var(--card);
+  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); --niveau: var(--accent);
+}
+.bilan[data-niveau="ok"] { --niveau: var(--ok); }
+.bilan[data-niveau="warn"] { --niveau: var(--warn); }
+.bilan[data-niveau="ko"] { --niveau: var(--ko); }
+.bilan-note { position: relative; width: 150px; height: 150px; }
+.anneau { width: 100%; height: 100%; transform: rotate(-90deg); }
+.anneau circle { fill: none; stroke-width: 10; }
+.anneau .fond { stroke: var(--key); }
+.anneau .valeur { stroke: var(--niveau); stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(.2,.7,.2,1), stroke .4s; }
+.bilan-chiffre { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.bilan-chiffre b { font: 400 3rem/1 var(--serif); font-variant-numeric: tabular-nums; }
+.bilan-chiffre span { font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: .08em; }
+.bilan-texte h2 { font: 400 2.2rem/1.05 var(--serif); margin: 8px 0 4px; color: var(--niveau); }
+.bilan-conseils { display: grid; gap: 8px; align-self: start; }
+.conseils { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
+.conseils li { padding: 8px 12px; border-radius: 12px; background: var(--bg-2); border-left: 3px solid var(--accent); }
+.conseils li.ko { border-left-color: var(--ko); }
+.conseils li.warn { border-left-color: var(--warn); }
+.conseils li.ok { border-left-color: var(--ok); color: var(--muted); }
+.conseils a { font-weight: 600; text-decoration: none; }
+.a-faire { display: flex; flex-wrap: wrap; gap: 6px; }
+.puce { text-decoration: none; font-size: 12.5px; padding: 5px 11px; border-radius: 999px; border: 1px dashed var(--border-strong); color: var(--muted); }
+.puce:hover { color: var(--text); border-style: solid; }
+.etapes { list-style: none; padding: 0; margin: 14px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; font-size: 13px; }
+.etapes li { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: var(--bg-2); }
+.etapes li em { margin-left: auto; font: 500 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-style: normal; }
+.etapes li.encours { outline: 1px solid var(--accent); }
+.etapes li.encours .dot { background: var(--accent); animation: pulse 1.2s infinite; }
+.etapes li.fin { grid-column: 1 / -1; background: none; color: var(--muted); padding-left: 0; }
+@media (max-width: 900px) {
+  .bilan { grid-template-columns: auto 1fr; }
+  .bilan-conseils { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .bilan { grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 20px; }
+  .bilan-texte .row { justify-content: center; }
+  .bilan-conseils { justify-items: stretch; text-align: left; width: 100%; }
+  .bilan-texte h2 { font-size: 1.9rem; }
+}
+
+/* Dialogues du bilan */
+dialog.large { width: min(980px, calc(100% - 24px)); }
+.hist-liste { display: grid; gap: 6px; max-height: 50vh; overflow: auto; }
+.hist { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--border); cursor: pointer; }
+.hist.courant { border-style: dashed; }
+.hist:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.hist input { accent-color: var(--accent); width: 17px; height: 17px; }
+.hist-note { font: 400 1.6rem/1 var(--serif); min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.hist-note.ok { color: var(--ok); } .hist-note.warn { color: var(--warn); } .hist-note.ko { color: var(--ko); }
+.hist-texte { flex: 1; min-width: 0; display: grid; }
+.hist-texte b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.hist-texte small { color: var(--muted); }
+.comp-zone { max-height: 62vh; overflow: auto; }
+.comparaison { width: 100%; border-collapse: collapse; font-size: 13px; }
+.comparaison th, .comparaison td { text-align: left; padding: 7px 8px; border-bottom: 1px dashed var(--border); vertical-align: top; }
+.comparaison thead th { position: sticky; top: 0; background: var(--card); font-weight: 600; }
+.comparaison thead small { display: block; font-weight: 400; color: var(--muted); }
+.comparaison tbody th { color: var(--muted); font-weight: 500; width: 36%; }
+.comparaison .sep th { font: 500 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding-top: 16px; color: var(--text); }
+.comparaison td.mieux { color: var(--ok); font-weight: 600; }
+.comparaison .vide { color: var(--muted); }
+.certif-cadre { width: 100%; height: 60vh; border: 1px solid var(--border); border-radius: 14px; background: #fff; }
+.verif { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+.verif.ok { color: var(--ok); } .verif.ko { color: var(--ko); }
+
+/* Caméra : photo de test */
+.cam-photo { width: 100%; max-height: 280px; object-fit: contain; background: #000; border-radius: 14px; margin-top: 10px; }
+
+/* Manettes */
+.pad-zone { display: grid; gap: 12px; margin-top: 10px; }
+.pad { border: 1px dashed var(--border-strong); border-radius: 16px; padding: 14px; display: grid; gap: 10px; }
+.pad b { font-weight: 600; }
+.pad .mbtns span.hit { background: var(--ok); color: #fff; }
+.pad .mbtns span.down { outline: 2px solid var(--accent); }
+.sticks { display: flex; gap: 14px; flex-wrap: wrap; }
+.stick { width: 70px; height: 70px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--key); display: grid; place-items: center; }
+.stick i { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }

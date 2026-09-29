@@ -7,6 +7,7 @@ diagnotest/
 ├── index.html              # Page unique de la version web (une carte par test)
 ├── css/style.css           # Styles : thème clair ou sombre, grille responsive
 ├── js/app.js               # Toute la logique des tests (JavaScript natif, sans dépendance)
+├── js/bilan.js             # Diagnostic express, note de santé, recommandations, certificat, historique, partage
 ├── js/design.js            # Couche visuelle : animations et formes SVG génératives
 ├── desktop/
 │   ├── diagnotest.py       # Version PC en ligne de commande
@@ -25,6 +26,10 @@ diagnotest/
 ├── docs/
 │   ├── GUIDE.md            # Guide d'utilisation
 │   └── TECHNIQUE.md        # Ce fichier
+├── tests/
+│   ├── e2e.cjs             # Tests de bout en bout de la version web (Playwright, Chromium sans écran)
+│   └── test_desktop.py     # Tests unitaires de la version PC (note de santé, rapport HTML)
+├── .github/workflows/tests.yml       # Lance tous les tests à chaque push et Pull Request
 ├── .github/workflows/pages.yml       # Déploiement automatique sur GitHub Pages
 ├── .github/workflows/build-exe.yml   # Compilation et publication de DiagnoTest.exe
 ├── .github/workflows/build-apk.yml   # Compilation et publication de DiagnoTest.apk
@@ -44,6 +49,36 @@ La version web n'a **ni framework, ni étape de compilation, ni dépendance**. O
   - `data` est un objet clé → valeur, fusionné avec les données déjà présentes.
 - `renderSummary()` redessine les pastilles, et `buildReport()` construit le rapport texte.
 - L'overlay plein écran (`openOverlay` / `closeOverlay`) sert aux tests d'écran et du tactile.
+- **Mode rapide** : avec `?rapide` dans l'adresse, `duree()` ramène les mesures longues (benchmarks, stress, décharge) à moins d'une seconde. Il ne sert qu'aux tests automatiques.
+
+## Architecture de `js/bilan.js`
+
+`bilan.js` est chargé juste après `app.js`. Les deux fichiers sont des scripts classiques : les constantes et fonctions de premier niveau d'`app.js` (`results`, `setResult`, `buildReport`, `download`, `nativeCall`…) sont donc directement visibles depuis `bilan.js`. `app.js` n'appelle `bilan.js` que si ses fonctions existent (`typeof calculerNote === 'function'`) : il fonctionne aussi seul.
+
+| Fonction | Rôle |
+|---|---|
+| `calculerNote(res)` | Note sur 100 : moyenne pondérée par `POIDS` (OK = 100, à surveiller = 60, défaut = 0, info ignorée). Un défaut matériel (hors réseau) plafonne la note à 69. |
+| `recommandations(res)` | Un conseil par test en défaut ou à surveiller (`CONSEILS`), précisé par les mesures quand c'est utile (charge lente, usure…). Les défauts d'abord. |
+| `diagnosticExpress()` | Clique tour à tour les boutons des tests automatiques (`ETAPES_EXPRESS`) et attend que `results[id].at` change. Émet `diag:express` à la fin. |
+| `instantane()` | Copie autonome du diagnostic (textes sans HTML) : base de l'historique, du certificat, du lien et de l'export `.json`. |
+| `codeRapport(inst)` | Empreinte SHA-256 de l'instantané (12 caractères hexadécimaux), affichée sur le certificat et vérifiée à l'ouverture d'un lien. |
+| `encoderRapport` / `decoderRapport` | Instantané → JSON → `CompressionStream('deflate-raw')` → base64url, placé après `#rapport=` dans l'adresse (préfixe `z`, ou `j` sans compression). |
+| `certificatHTML(inst)` | Page HTML autonome (styles intégrés, données échappées), imprimée depuis un `iframe` ou enregistrée en `.html` dans les applications. |
+| `enregistrerHistorique`, `tableComparaison` | Historique dans `localStorage` (`dt-historique`, 30 entrées) ; comparaison des mesures de `METRIQUES`, la meilleure valeur en vert. |
+
+## Tests automatiques
+
+```bash
+npm install --no-save playwright
+npx playwright install chromium
+node tests/e2e.cjs
+```
+
+```bash
+python -m unittest discover -s tests
+```
+
+`e2e.cjs` sert lui-même le site, l'ouvre avec `?rapide` et vérifie : le diagnostic express de bout en bout, les calculs de note et de recommandations, le rapport, le certificat (données échappées, code), l'aller-retour du lien de partage et la détection d'une modification, l'historique et la comparaison, l'affichage sur téléphone et l'absence d'erreur JavaScript. Le workflow `.github/workflows/tests.yml` lance ces tests, et ceux de la version PC sous Linux et Windows, à chaque push et Pull Request.
 
 ### Ajouter un test
 
@@ -103,6 +138,14 @@ L'interface s'inspire de quatre sources, réimplémentées en CSS et JavaScript 
 | Réseau | Network Information API, `fetch` vers jsDelivr | Latence = médiane de 5 requêtes (la 1re, avec DNS et TLS, est écartée) |
 | Stockage | `navigator.storage.estimate()`, IndexedDB | |
 | GPU | WebGL : shader de Mandelbrot, 256 itérations, 4 passes par frame | |
+| Chargeur | `getBattery()` (progression du niveau) ; `currentNow` du pont Android (courant en mA) | Sous 80 % de charge, pour éviter le ralentissement de fin de charge |
+| Flou de mouvement | `requestAnimationFrame`, blocs à 240, 480 et 960 px/s | Jugement visuel du *ghosting* |
+| Bruit du micro | `AnalyserNode`, niveau RMS converti en dBFS, médiane sur 3 s | |
+| Photo, lampe | `ImageCapture.takePhoto()` (repli : image du flux vidéo), contrainte `torch` | La lampe n'apparaît que si `getCapabilities().torch` existe |
+| Boussole, luminosité | `deviceorientationabsolute`, `webkitCompassHeading` (iOS), `AmbientLightSensor` | |
+| Manettes | Gamepad API (`getGamepads`, `vibrationActuator.playEffect`) | Dérive : écart maximal des axes au repos pendant 3 s, seuil 0,1 |
+| Bluetooth | `navigator.bluetooth.getAvailability()` | Chromium seulement |
+| Partage | `CompressionStream`, `crypto.subtle.digest` | Repli sans compression ou empreinte FNV-1a si indisponibles |
 
 ## Version PC : sources des données
 
@@ -114,6 +157,8 @@ L'interface s'inspire de quatre sources, réimplémentées en CSS et JavaScript 
 | Barrettes de RAM | `Win32_PhysicalMemory` | — | — |
 | Santé des disques | `Get-PhysicalDisk` | `lsblk` (+ `smartctl` s'il est présent) | — |
 | Température | `MSAcpi_ThermalZoneTemperature` (en administrateur) | `psutil.sensors_temperatures()` | — |
+
+La version PC calcule la même note de santé que la version web (`note_sante`, `recommandations`, poids propres à ses cinq tests) et enregistre, en plus du `.txt` et du `.json`, un rapport `.html` imprimable.
 
 Le benchmark CPU utilise `multiprocessing` (un processus par thread logique) pour contourner le GIL de Python.
 
@@ -242,7 +287,8 @@ Le workflow `.github/workflows/pages.yml` publie le site sur GitHub Pages à cha
 
 ## Confidentialité
 
-- Aucune télémétrie, aucun cookie, et aucun résultat de test n'est envoyé. Les seules requêtes externes sont le chargement des polices depuis Google Fonts et, pendant le test réseau, le téléchargement de fichiers publics depuis `cdn.jsdelivr.net`. Le thème choisi est conservé dans le `localStorage`.
+- Aucune télémétrie, aucun cookie, et aucun résultat de test n'est envoyé. Les seules requêtes externes sont le chargement des polices depuis Google Fonts et, pendant le test réseau, le téléchargement de fichiers publics depuis `cdn.jsdelivr.net`. Le thème choisi et l'historique des diagnostics sont conservés dans le `localStorage` de l'appareil.
+- Le lien de partage contient le rapport dans la partie `#…` de l'adresse, que les navigateurs n'envoient jamais au serveur.
 - Les coordonnées GPS sont affichées à l'écran mais ne figurent jamais dans le rapport.
 
 ## Contribuer

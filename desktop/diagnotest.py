@@ -32,7 +32,7 @@ try:
 except ImportError:  # le script fonctionne en mode dégradé sans psutil
     psutil = None
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 IS_WIN, IS_LINUX, IS_MAC = sys.platform == "win32", sys.platform.startswith("linux"), sys.platform == "darwin"
 
@@ -61,7 +61,7 @@ def line(key: str, value) -> None:
 
 
 def verdict(section: str, status: str, data: dict) -> None:
-    REPORT[section] = {"statut": LABEL[status], "donnees": data}
+    REPORT[section] = {"statut": LABEL[status], "code": status, "donnees": data}
     print(f"  {C[status]}{ICON[status]} {LABEL[status]}{C['0']}")
 
 
@@ -490,6 +490,87 @@ def test_network() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Note de santé, recommandations et rapport HTML                              #
+# --------------------------------------------------------------------------- #
+# Mêmes règles que la version web (js/bilan.js) : OK = 100, à surveiller = 60, défaut = 0, pondérés ;
+# un défaut matériel plafonne la note à 69 (au mieux « Moyen »). Une absence de réseau n'est pas une panne.
+POIDS = {"batterie": 3, "ram": 3, "disques": 3, "cpu": 2, "reseau": 1}
+VALEUR = {"ok": 100, "warn": 60, "ko": 0}
+MENTIONS = ((90, "Excellent"), (75, "Bon"), (50, "Moyen"), (0, "Mauvais"))
+CONSEILS = {
+    "batterie": {"ko": "Batterie très usée : prévoyez son remplacement.",
+                 "warn": "Batterie usée : autonomie réduite, son remplacement améliorera nettement l'ordinateur."},
+    "cpu": {"ko": "Le processeur surchauffe fortement : nettoyez les aérations et le ventilateur, et faites changer la pâte thermique.",
+            "warn": "Le processeur ralentit sous la charge (surchauffe) : nettoyez les aérations et le ventilateur."},
+    "ram": {"ko": "Erreurs mémoire : barrette défectueuse probable. Confirmez avec MemTest86 avant de la remplacer."},
+    "disques": {"ko": "Disque en mauvaise santé : sauvegardez vos données sans attendre et prévoyez son remplacement.",
+                "warn": "Disque à surveiller (lent ou presque plein) : libérez de l'espace et sauvegardez vos données."},
+    "reseau": {"ko": "Pas de connexion pendant le test : vérifiez le câble, le Wi-Fi ou le pare-feu.",
+               "warn": "Connexion lente, ou bloquée pour ce programme par le pare-feu ou l'antivirus."},
+}
+
+
+def note_sante(report: dict) -> dict:
+    somme = poids = 0
+    evalues, defauts = [], []
+    for section, r in report.items():
+        code = r.get("code")
+        if section not in POIDS or code not in VALEUR:
+            continue
+        somme += VALEUR[code] * POIDS[section]
+        poids += POIDS[section]
+        evalues.append(section)
+        if code == "ko":
+            defauts.append(section)
+    if not poids:
+        return {"note": None, "mention": "Pas de résultat", "evalues": 0, "total": len(POIDS)}
+    note = round(somme / poids)
+    if any(d != "reseau" for d in defauts):
+        note = min(note, 69)
+    mention = next(m for seuil, m in MENTIONS if note >= seuil)
+    return {"note": note, "mention": mention, "evalues": len(evalues), "total": len(POIDS)}
+
+
+def recommandations(report: dict) -> list[tuple[str, str]]:
+    liste = []
+    for section in POIDS:
+        code = report.get(section, {}).get("code")
+        if code in ("ko", "warn"):
+            texte = CONSEILS[section].get(code) or CONSEILS[section]["ko"]
+            liste.append((code, texte))
+    return sorted(liste, key=lambda c: c[0] != "ko")
+
+
+def rapport_html(report: dict, bilan: dict, conseils: list, quand: datetime) -> str:
+    from html import escape
+    couleurs = {"ok": "#16a34a", "warn": "#d97706", "ko": "#dc2626", "info": "#6d4aff"}
+    lignes = []
+    for section, r in report.items():
+        details = "<br>".join(f"{escape(str(k))} : {escape(str(v))}" for k, v in r["donnees"].items())
+        couleur = couleurs.get(r.get("code"), "#555")
+        lignes.append(f'<tr><td>{escape(section.capitalize())}</td><td><b style="color:{couleur}">{escape(r["statut"])}</b></td><td>{details}</td></tr>')
+    liste = "".join(f'<li class="{c}">{escape(t)}</li>' for c, t in conseils) or "<li>Aucun problème détecté sur les tests effectués.</li>"
+    note = "—" if bilan["note"] is None else bilan["note"]
+    return f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rapport DiagnoTest — {escape(platform.node())}</title><style>
+body{{font:14px/1.5 system-ui,"Segoe UI",Roboto,sans-serif;color:#1a1a19;max-width:900px;margin:0 auto;padding:28px}}
+header{{display:flex;justify-content:space-between;align-items:center;gap:20px;border-bottom:2px solid #1a1a19;padding-bottom:14px}}
+h1{{font:400 30px/1.1 Georgia,serif;margin:6px 0 4px}}header p{{margin:0;color:#6b6a66}}
+.note{{text-align:center;border:2px solid #1a1a19;border-radius:18px;padding:10px 18px}}.note b{{font:400 44px/1 Georgia,serif;display:block}}
+h2{{font:400 20px/1.2 Georgia,serif;margin:22px 0 8px}}table{{width:100%;border-collapse:collapse}}
+td{{text-align:left;vertical-align:top;padding:7px 8px;border-bottom:1px solid #e5e4e0}}td:first-child{{font-weight:600;width:18%}}
+td:nth-child(2){{width:14%}}td:last-child{{font-size:13px;color:#444}}li.ko{{color:#b91c1c}}li.warn{{color:#92400e}}
+footer{{margin-top:24px;color:#6b6a66;font-size:12px}}</style></head><body>
+<header><div><b style="color:#6d4aff">DIAGNOTEST DESKTOP {__version__}</b><h1>Rapport de diagnostic</h1>
+<p>{escape(platform.node())} · {quand:%d/%m/%Y %H:%M}</p></div>
+<div class="note"><b>{note}</b>/ 100<br><strong>{escape(bilan["mention"])}</strong></div></header>
+<p>{bilan["evalues"]} tests évalués sur {bilan["total"]}.</p>
+<h2>Résultats</h2><table>{"".join(lignes)}</table>
+<h2>Recommandations</h2><ul>{liste}</ul>
+<footer>Généré localement par DiagnoTest Desktop. Ce rapport décrit l'état constaté au moment du test.</footer></body></html>"""
+
+
+# --------------------------------------------------------------------------- #
 # Programme principal                                                         #
 # --------------------------------------------------------------------------- #
 TESTS = ["system", "battery", "cpu", "ram", "disk", "network"]
@@ -538,20 +619,36 @@ def main() -> None:
     title("Bilan")
     counts = {s: sum(1 for r in REPORT.values() if r["statut"] == LABEL[s]) for s in ("ok", "warn", "ko")}
     print(f"\r\033[K  {C['ok']}{counts['ok']} OK{C['0']} · {C['warn']}{counts['warn']} à surveiller{C['0']} · {C['ko']}{counts['ko']} défaut(s){C['0']}")
+    bilan, conseils = note_sante(REPORT), recommandations(REPORT)
+    if bilan["note"] is not None:
+        couleur = C["ok"] if bilan["note"] >= 75 else C["warn"] if bilan["note"] >= 50 else C["ko"]
+        print(f"  {C['b']}Note de santé : {couleur}{bilan['note']}/100 ({bilan['mention']}){C['0']}"
+              f" {C['dim']}— {bilan['evalues']} tests évalués sur {bilan['total']}{C['0']}")
+    for code, texte in conseils:
+        print(f"  {C[code]}{ICON[code]}{C['0']} {texte}")
 
     os.makedirs(args.output, exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
     base = os.path.join(args.output, f"diagnotest-{platform.node()}-{stamp}")
     with open(base + ".json", "w", encoding="utf-8") as f:
-        json.dump({"date": datetime.now().isoformat(), "machine": platform.node(), "resultats": REPORT}, f, ensure_ascii=False, indent=2)
+        json.dump({"date": datetime.now().isoformat(), "machine": platform.node(), "version": __version__,
+                   "note": bilan["note"], "mention": bilan["mention"], "recommandations": [t for _, t in conseils],
+                   "resultats": REPORT}, f, ensure_ascii=False, indent=2)
     with open(base + ".txt", "w", encoding="utf-8") as f:
-        f.write(f"RAPPORT DIAGNOTEST DESKTOP — {datetime.now():%d/%m/%Y %H:%M}\n\n")
+        f.write(f"RAPPORT DIAGNOTEST DESKTOP — {datetime.now():%d/%m/%Y %H:%M}\n")
+        if bilan["note"] is not None:
+            f.write(f"Note de santé : {bilan['note']}/100 ({bilan['mention']}) — {bilan['evalues']} tests évalués sur {bilan['total']}\n")
+        f.write("\n")
         for sec, r in REPORT.items():
             f.write(f"■ {sec.upper()} — {r['statut']}\n")
             for k, v in r["donnees"].items():
                 f.write(f"    {k} : {v}\n")
             f.write("\n")
-    print(f"\n  Rapport enregistré : {base}.txt / .json")
+        if conseils:
+            f.write("RECOMMANDATIONS\n" + "".join(f"  - {t}\n" for _, t in conseils))
+    with open(base + ".html", "w", encoding="utf-8") as f:
+        f.write(rapport_html(REPORT, bilan, conseils, datetime.now()))
+    print(f"\n  Rapport enregistré : {base}.txt / .json / .html (à ouvrir dans le navigateur, imprimable en PDF)")
 
 
 if __name__ == "__main__":

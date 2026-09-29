@@ -3,6 +3,7 @@
 Ce guide explique comment faire chaque test et comment lire les résultats. Si vous achetez un appareil d'occasion, faites **tous** les tests : il suffit d'une dizaine de minutes.
 
 - [Avant de commencer](#avant-de-commencer)
+- [Le bilan de santé](#le-bilan-de-santé)
 - [Tests de la version web](#tests-de-la-version-web)
 - [Application Android](#application-android)
 - [iPhone et iPad](#iphone-et-ipad)
@@ -34,6 +35,50 @@ Les tests qui dépendent de vos yeux ou de vos oreilles (écran, son, clavier…
 
 ---
 
+## Le bilan de santé
+
+### ⚡ Le diagnostic express
+Le bouton **Diagnostic express** (en haut de la page, ou dans le panneau *Bilan*) enchaîne tout seul les tests qui ne demandent aucune action : système, batterie, processeur, mémoire (256 Mo), stockage, réseau, carte graphique et fréquence de l'écran. Il dure environ une minute. Laissez l'appareil tranquille pendant ce temps : un autre programme gourmand fausserait les scores. Le bouton **Arrêter** interrompt le diagnostic à tout moment.
+
+### La note sur 100
+Chaque test compte selon son importance : la batterie, la mémoire, l'écran et le tactile pèsent plus lourd que le réseau ou les manettes.
+
+| Résultat | Points |
+|---|---|
+| 🟢 OK | 100 |
+| 🟠 À surveiller | 60 |
+| 🔴 Défaut | 0 |
+| 🔵 Information | ne compte pas |
+
+| Note | Mention |
+|---|---|
+| 90 à 100 | Excellent |
+| 75 à 89 | Bon |
+| 50 à 74 | Moyen |
+| moins de 50 | Mauvais |
+
+- Un **défaut matériel** plafonne la note à 69 : un appareil avec une pièce en panne ne peut pas être « Bon ». Une absence de connexion internet n'est pas considérée comme une panne.
+- La note ne porte que sur les tests effectués : le panneau indique combien ont été évalués. Complétez les tests **« À tester vous-même »** (écran, tactile, clavier, son, caméra…) pour une note fiable.
+- Les **recommandations** expliquent quoi faire pour chaque problème (changer la batterie, nettoyer la ventilation, essayer un autre câble…). Cliquez sur le nom du test pour y aller.
+
+### 📄 Le certificat PDF
+**Certificat PDF** ouvre la fenêtre d'impression avec une page propre : note, caractéristiques de l'appareil, résultat de chaque test, recommandations. Choisissez **Enregistrer au format PDF** comme imprimante. Dans les applications Android et iOS, le certificat est enregistré en fichier `.html`, à ouvrir puis imprimer depuis le navigateur.
+
+Chaque certificat porte un **code du rapport** (par exemple `CA72-D4BC-FB94`), calculé à partir des résultats. Le même diagnostic donne le même code sur le certificat et sur le lien de partage : un acheteur peut vérifier que les deux correspondent.
+
+### 🔗 Le lien de partage
+Dans le rapport, **Lien de partage** crée une adresse qui contient tout le diagnostic, compressé. Envoyez-la à un acheteur ou à un réparateur : en l'ouvrant, il voit le certificat, et DiagnoTest vérifie que le contenu correspond à son code. Le lien n'est enregistré sur aucun serveur.
+
+> Le code détecte une modification du rapport après coup, mais il ne prouve pas que le test a été fait sur l'appareil vendu. Pour un achat, le plus sûr reste de lancer DiagnoTest vous-même sur l'appareil.
+
+### 🕘 L'historique et la comparaison
+Chaque diagnostic express, certificat ou lien est enregistré dans l'**historique** de ce navigateur (30 au maximum). Cochez-en deux et cliquez sur **Comparer les deux** : les mesures sont affichées côte à côte, et la meilleure valeur de chaque ligne est en vert. C'est pratique pour :
+- vérifier une réparation (avant / après un changement de pâte thermique, par exemple) ;
+- choisir entre deux appareils d'occasion ;
+- comparer avec un rapport reçu (**Importer un rapport .json**, ou **Comparer avec cet appareil** depuis un lien reçu).
+
+---
+
 ## Tests de la version web
 
 ### 💻 Informations système
@@ -47,6 +92,9 @@ Ces informations s'affichent automatiquement. Comparez-les avec l'annonce ou la 
   - Téléphone au repos : moins de 10 %/h, c'est bien.
   - Ordinateur portable en bureautique : de 10 à 25 %/h, c'est normal.
   - Plus de 30 %/h : batterie usée, ou un programme qui tourne en arrière-plan.
+- **Tester le chargeur (2 min)** : branchez le chargeur, puis lancez le test. DiagnoTest mesure la vitesse de charge (et le courant en mA dans l'application Android).
+  - Moins de 500 mA, ou moins de 0,3 % par minute sous 80 % : **charge lente**. Essayez un autre câble, un autre chargeur, et nettoyez le port de charge (la poussière y est fréquente).
+  - Au-dessus de 80 %, la charge ralentit volontairement : refaites le test batterie plus basse.
 - Pour connaître **l'usure réelle** (capacité actuelle comparée à celle d'origine) :
   - sur PC, utilisez la version Python ;
   - sur iPhone : *Réglages → Batterie → État de la batterie* ;
@@ -73,6 +121,7 @@ Tous ces tests s'ouvrent en **plein écran**. Pour avancer, cliquez, touchez l'�
 |---|---|
 | **Pixels morts** | Sur chaque couleur, un point qui ne change pas : noir sur fond blanc = pixel mort, point coloré sur fond noir = pixel bloqué. |
 | **Dégradés / bandes** | 1) Les dégradés doivent être lisses. 2) Les 32 bandes de gris doivent **toutes** être distinguables. 3) Le damier fin doit paraître gris uniforme, sans moiré. |
+| **Flou de mouvement** | Des blocs blancs défilent à trois vitesses. Leurs bords doivent rester nets : une traînée ou une image « fantôme » derrière eux révèle un écran lent (*ghosting*), gênant pour les jeux. |
 | **Fuite de lumière** | Dans une pièce sombre, sur l'écran noir : des halos clairs dans les coins signalent une fuite de rétroéclairage (écrans LCD). Un écran OLED doit être parfaitement noir. |
 | **Réparer pixel bloqué** ⚠️ | Placez le carré clignotant sur le pixel bloqué pendant 10 à 30 min. Cela marche parfois sur un pixel *bloqué* (coloré), jamais sur un pixel *mort* (noir). |
 | **Fréquence (Hz)** | Doit correspondre à la fiche technique (60, 90, 120, 144 Hz…). Si la valeur est plus basse, vérifiez les paramètres d'affichage ou le mode économie d'énergie. |
@@ -101,16 +150,24 @@ Sur téléphone, tapez dans le champ texte pour vérifier le clavier virtuel.
 ### 🎤 Microphone
 Démarrez le micro, parlez : la jauge et la courbe doivent réagir. Ensuite, **Enregistrer 5 s et réécouter** : le son doit être clair, sans souffle ni coupure.
 
+**Bruit de fond (3 s)** : restez silencieux dans une pièce calme. Le niveau s'affiche en dBFS (0 = son le plus fort possible) :
+- en dessous de −60 dBFS : très calme ✓ ;
+- de −60 à −45 dBFS : normal ✓ ;
+- au-dessus de −30 dBFS dans une pièce calme : le micro souffle, il est probablement abîmé.
+
 ### 📷 Caméra
 Choisissez une caméra dans la liste (avant, arrière, webcam), puis **Démarrer**. Vérifiez la netteté (mise au point), l'absence de taches (poussière derrière la lentille) et de lignes. La résolution maximale obtenue s'affiche.
+- **Photo** : prend une photo en pleine résolution (quand le navigateur le permet) et affiche sa taille en mégapixels. Zoomez dessus pour juger la netteté.
+- **Lampe torche** : n'apparaît que si la caméra a un flash pilotable (surtout la caméra arrière des téléphones Android). Il doit s'allumer puis s'éteindre.
 
 ### 🧭 Capteurs & vibreur
-- **Activer les capteurs** : inclinez l'appareil, la bulle doit bouger. Sur iPhone, il faut autoriser l'accès.
+- **Activer les capteurs** : inclinez l'appareil, la bulle doit bouger. Sur iPhone, il faut autoriser l'accès. La **boussole** indique le cap (0° = nord) : tournez sur vous-même, la valeur doit suivre. Si le navigateur le permet, la **luminosité ambiante** s'affiche aussi, en lux.
 - **Tester le vibreur** : l'appareil doit vibrer trois fois. Sur iPhone, les navigateurs ne permettent pas ce test.
 - **Tester le GPS** : la position et sa précision s'affichent. À l'extérieur, une précision inférieure à 20 m est bonne. Les coordonnées ne sont **jamais** incluses dans le rapport.
 
 ### 🌐 Réseau
-Mesure la **latence** (délai de réponse), la **gigue** (stabilité) et le **débit descendant** en téléchargeant des fichiers publics depuis le CDN jsDelivr.
+Mesure la **latence** (délai de réponse), la **gigue** (stabilité), les **pertes** (requêtes sans réponse en 3 s) et le **débit descendant** en téléchargeant des fichiers publics depuis le CDN jsDelivr.
+- Pertes : 0 % est normal. Des pertes régulières trahissent un Wi-Fi faible ou une antenne abîmée.
 - Latence : moins de 30 ms, excellent ; de 30 à 100 ms, correct ; plus de 150 ms, lent.
 - Pour une mesure plus complète, montant compris, utilisez un service dédié.
 
@@ -122,6 +179,13 @@ Affiche une fractale animée très coûteuse à calculer pendant 10 s.
 - Le **FPS moyen** et le **score en Mpix/s** permettent de comparer des appareils entre eux.
 - Si le **FPS minimum** est très inférieur à la moyenne, il y a des saccades : surchauffe ou pilote graphique en cause.
 - Des artefacts visuels (carrés, lignes, couleurs aberrantes) peuvent indiquer une carte graphique défaillante.
+
+### 🎮 Manettes de jeu
+Branchez une manette (USB ou Bluetooth : Xbox, PlayStation, Switch Pro, manettes génériques) et appuyez sur un bouton pour qu'elle soit détectée.
+- Appuyez sur **chaque bouton** : il passe au vert. Les gâchettes analogiques affichent leur pourcentage d'enfoncement.
+- Les **cercles** montrent la position des joysticks : poussez-les dans toutes les directions.
+- **Mesurer la dérive des joysticks** : ne touchez à rien pendant 3 s. Au repos, un joystick en bon état revient au centre. Au-delà de 10 %, il **dérive** (*drift*) : le personnage ou la caméra bouge tout seul en jeu.
+- **Tester les vibrations** : la manette doit vibrer (Chrome et Edge).
 
 ---
 
@@ -251,7 +315,9 @@ Le bouton **📄 Rapport** (version web) rassemble tous les résultats :
 - **Télécharger .json** : données structurées, pour archiver ou comparer ;
 - **Copier** : à coller dans un message.
 
-La version PC enregistre automatiquement `diagnotest-<machine>-<date>.txt` et `.json`.
+Il propose aussi le **certificat PDF**, le **lien de partage** et l'**historique** : voir [Le bilan de santé](#le-bilan-de-santé). Le rapport texte commence par la note de santé et se termine par les recommandations.
+
+La version PC enregistre automatiquement `diagnotest-<machine>-<date>.txt`, `.json` et `.html`. Le fichier `.html` s'ouvre dans le navigateur avec la note et les recommandations, et s'imprime en PDF.
 
 > Le rapport PC contient le **numéro de série** de la machine. Retirez-le avant de publier le rapport si vous ne souhaitez pas le communiquer.
 
@@ -281,14 +347,18 @@ Safari sur iPhone limite le plein écran. Ajoutez la page à l'écran d'accueil 
 
 ## Check-list pour un achat d'occasion
 
+Commencez par le **diagnostic express**, puis faites les tests de la liste « À tester vous-même ». Visez une note d'au moins 75 (« Bon »), et lisez chaque recommandation.
+
 - [ ] Système : les caractéristiques correspondent à l'annonce
 - [ ] Batterie : santé ≥ 80 % (version PC, ou réglages du téléphone)
 - [ ] CPU : stress test de 5 min sans chute importante
 - [ ] RAM : 0 erreur
 - [ ] Écran : aucun pixel mort, pas de fuite de lumière, pas de burn-in, bonne fréquence
 - [ ] Tactile : 100 % de couverture, multi-touch OK
+- [ ] Chargeur : charge normale ou rapide (le port de charge fonctionne)
 - [ ] Clavier : toutes les touches répondent
-- [ ] Haut-parleurs gauche et droite, micro, caméras avant et arrière
+- [ ] Haut-parleurs gauche et droite, micro (bruit de fond normal), caméras avant et arrière, flash
+- [ ] Manettes (console, PC de jeu) : tous les boutons, aucune dérive
 - [ ] Capteurs, vibreur, GPS (téléphone)
 - [ ] Wi-Fi fonctionnel
 - [ ] Disques : santé « Healthy » (version PC)

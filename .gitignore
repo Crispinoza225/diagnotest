@@ -6,3 +6,5 @@ build/
 diagnotest-*.txt
 diagnotest-*.json
 .claude/
+node_modules/
+diagnotest-*.html

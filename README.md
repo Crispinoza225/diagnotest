@@ -1,6 +1,6 @@
 # 🩺 DiagnoTest
 
-**Testez le matériel d'un ordinateur ou d'un téléphone en quelques minutes : batterie, processeur, mémoire, écran, clavier, tactile, audio, caméra, capteurs, réseau, stockage et carte graphique.**
+**Testez le matériel d'un ordinateur ou d'un téléphone en quelques minutes : batterie, processeur, mémoire, écran, clavier, tactile, audio, caméra, capteurs, réseau, stockage, carte graphique et manettes. DiagnoTest donne une note de santé sur 100, des recommandations et un certificat PDF.**
 
 DiagnoTest existe en quatre versions :
 
@@ -18,25 +18,37 @@ DiagnoTest existe en quatre versions :
 
 ## ✨ Fonctionnalités
 
+### Bilan de santé
+
+| | |
+|---|---|
+| ⚡ **Diagnostic express** | Un bouton enchaîne en une minute tous les tests automatiques : système, batterie, processeur, mémoire, stockage, réseau, carte graphique, fréquence de l'écran |
+| 💯 **Note sur 100** | Moyenne pondérée des tests (la batterie, la mémoire, l'écran et le tactile comptent davantage), mention *Excellent / Bon / Moyen / Mauvais* ; un défaut matériel plafonne la note |
+| 🛠️ **Recommandations** | Que faire pour chaque problème : changer la batterie, nettoyer la ventilation, essayer un autre câble, vérifier la RAM avec MemTest86… |
+| 📄 **Certificat PDF** | Une page imprimable avec la note, l'appareil, chaque résultat et un **code de rapport** |
+| 🔗 **Lien de partage** | Le rapport complet compressé dans l'adresse, sans serveur ; à l'ouverture, son contenu est vérifié avec le code |
+| 🕘 **Historique et comparaison** | Les diagnostics restent dans le navigateur ; deux diagnostics se comparent côte à côte (avant / après réparation, deux appareils) |
+
 ### Version web
 
 | Test | Contenu |
 |---|---|
 | 💻 **Système** | OS, navigateur, type d'appareil, cœurs, RAM approximative, GPU, écran, architecture, modèle |
-| 🔋 **Batterie** | Niveau, charge, temps restant, **mesure de la décharge sur 5 min** avec estimation de l'autonomie |
+| 🔋 **Batterie** | Niveau, charge, temps restant, **mesure de la décharge sur 5 min** avec estimation de l'autonomie, **test du chargeur et du port de charge** (vitesse de charge) |
 | ⚙️ **CPU** | Benchmark mono-cœur et multi-cœurs (Web Workers), **stress test** avec courbe et détection de surchauffe (throttling) |
 | 🧠 **RAM** | Allocation de 128 Mo à 2 Go, écriture et vérification de motifs, débit en lecture et en écriture, erreurs détectées |
-| 🖥️ **Écran** | Pixels morts (9 couleurs plein écran), dégradés et bandes, damier 1 px, fuite de lumière, **réparation de pixel bloqué**, mesure de la **fréquence (Hz)**, résolution, HDR et gamut |
+| 🖥️ **Écran** | Pixels morts (9 couleurs plein écran), dégradés et bandes, damier 1 px, fuite de lumière, **réparation de pixel bloqué**, **flou de mouvement (ghosting)**, mesure de la **fréquence (Hz)**, résolution, HDR et gamut |
 | 👆 **Tactile & souris** | Grille à balayer pour trouver les zones mortes, **multi-touch** (nombre de doigts), boutons de souris, molette, double-clic |
 | ⌨️ **Clavier** | Clavier virtuel AZERTY ou QWERTY qui s'allume touche par touche, pavé numérique et touches spéciales ajoutés automatiquement |
-| 🔊 **Haut-parleurs** | Gauche, droite ou les deux, balayage de fréquence de 20 Hz à 20 kHz |
-| 🎤 **Micro** | Vumètre, forme d'onde, enregistrement de 5 s avec réécoute |
-| 📷 **Caméra** | Toutes les caméras (avant et arrière), résolution maximale, images par seconde |
-| 🧭 **Capteurs** | Gyroscope (niveau à bulle), accéléromètre, **vibreur**, **GPS** |
-| 🌐 **Réseau** | Type de connexion, latence, gigue, débit descendant |
+| 🔊 **Haut-parleurs** | Gauche, droite ou les deux, balayage de fréquence de 20 Hz à 20 kHz, sorties audio détectées |
+| 🎤 **Micro** | Vumètre, forme d'onde, enregistrement de 5 s avec réécoute, **bruit de fond en dBFS** |
+| 📷 **Caméra** | Toutes les caméras (avant et arrière), résolution maximale, images par seconde, **photo en pleine résolution**, **lampe torche** |
+| 🧭 **Capteurs** | Gyroscope (niveau à bulle), accéléromètre, **boussole**, luminosité ambiante, **vibreur**, **GPS** |
+| 🌐 **Réseau** | Type de connexion, latence, gigue, **pertes**, débit descendant |
 | 💾 **Stockage** | Quota, débit IndexedDB, vérification d'intégrité |
 | 🎮 **GPU** | Modèle, WebGL, benchmark fractal de 10 s (FPS moyen et minimum) |
-| 📄 **Rapport** | Résumé coloré, export `.txt` / `.json`, copie dans le presse-papiers |
+| 🕹️ **Manettes** | Tous les boutons et gâchettes, position des joysticks en direct, **mesure de la dérive (drift)**, vibrations |
+| 📄 **Rapport** | Note et recommandations, export `.txt` / `.json`, copie, certificat PDF, lien de partage, historique |
 
 ### Version PC (`desktop/diagnotest.py`)
 
@@ -46,7 +58,8 @@ DiagnoTest existe en quatre versions :
 - **Disques** : modèle, type SSD ou HDD, **état de santé**, remplissage des partitions, **vitesse d'écriture et de lecture**
 - **Réseau** : interfaces actives, latence, DNS
 - **Système** : fabricant, modèle, n° de série, BIOS, cartes graphiques et pilotes
-- Rapport enregistré en `.txt` et `.json`
+- **Note de santé sur 100** et recommandations, avec les mêmes règles que la version web
+- Rapport enregistré en `.txt`, `.json` et `.html` (imprimable en PDF)
 
 ---
 
@@ -61,8 +74,9 @@ L'interface s'inspire de [Manus](https://manus.im) et [motion-primitives](https:
 ### Sur un téléphone ou un ordinateur (version web)
 
 1. Ouvrez **https://crispinoza225.github.io/diagnotest/** dans Chrome, Edge, Firefox ou Safari.
-2. Lancez les tests un par un. Les pastilles en haut de la page passent au vert, à l'orange ou au rouge.
-3. Cliquez sur **📄 Rapport** pour obtenir le bilan.
+2. Cliquez sur **Diagnostic express** : les tests automatiques s'enchaînent en une minute et la note de santé s'affiche.
+3. Faites les tests de la liste **« À tester vous-même »** (écran, tactile, clavier, son, caméra…). Les pastilles en haut de la page passent au vert, à l'orange ou au rouge.
+4. Cliquez sur **Certificat PDF** ou **📄 Rapport** pour obtenir le bilan.
 
 Pour l'utiliser hors ligne, téléchargez le dépôt et ouvrez `index.html` au travers d'un petit serveur local :
 
@@ -130,6 +144,10 @@ python desktop/diagnotest.py --stress 300 --ram-mb 4096
 
 ---
 
+## ✅ Tests automatiques
+
+Chaque push et chaque Pull Request lancent les tests (`.github/workflows/tests.yml`) : la version web est testée dans Chromium sans écran (diagnostic express, note, certificat, historique, lien de partage), et la version PC sous Linux et Windows. Voir [docs/TECHNIQUE.md](docs/TECHNIQUE.md#tests-automatiques).
+
 ## 📚 Documentation
 
 - [Guide d'utilisation](docs/GUIDE.md) : comment faire chaque test et interpréter les résultats
@@ -140,10 +158,14 @@ python desktop/diagnotest.py --stress 300 --ram-mb 4096
 | Fonction | Application Android | Application iOS | Chrome / Edge (PC, Android) | Firefox | Safari (Mac, iPhone) |
 |---|:-:|:-:|:-:|:-:|:-:|
 | Batterie | ✅ détaillée | ✅ niveau, état thermique | ✅ | ❌ | ❌ |
+| Test du chargeur | ✅ courant en mA | ✅ | ✅ | ❌ | ❌ |
 | CPU, RAM, écran, clavier, GPU | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Vibreur | ✅ | ✅ Core Haptics | ✅ Android | ✅ Android | ❌ |
 | Gyroscope / accéléromètre | ✅ | ✅ | ✅ | ✅ | ✅ (autorisation demandée) |
 | Micro, caméra, GPS | ✅ | ✅ | ✅ HTTPS | ✅ HTTPS | ✅ HTTPS |
+| Manettes | ✅ | ✅ | ✅ (vibrations comprises) | ✅ sans vibrations | ✅ sans vibrations |
+| Lampe torche | ✅ | ❌ | ✅ Android | ❌ | ❌ |
+| Certificat PDF | ✅ fichier `.html` | ✅ fichier `.html` | ✅ | ✅ | ✅ |
 | Hors ligne | ✅ | ✅ | ✅ une fois installé (PWA) | ✅ PWA | ✅ PWA |
 
 ## ⚠️ Avertissements
